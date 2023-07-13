@@ -44,9 +44,10 @@ mutable struct ADMMEnv <: AbstractEnv
     data_area::Dict{Int,Any}
     done::Bool
     iteration::Int
+    rng
 end
 
-function ADMMEnv(data, action_set;
+function ADMMEnv(data, action_set, rng;
     model_type = ACPPowerModel,
     dopf_method = admm_methods,
     tol = 1e-4,
@@ -59,7 +60,7 @@ function ADMMEnv(data, action_set;
     action_space = Base.OneTo(length(action_set)) 
     state_space = Vector{ClosedInterval{AbstractFloat}}() 
     for i = 1:2*n_history
-        push!(state_space,ClosedInterval(0.0,100.0))
+        push!(state_space,ClosedInterval(0.0,5000.0))
     end
     alpha = rand(action_space)
     data_area = initialize_dopf(data, model_type, dopf_method, alpha, max_iteration, tol)
@@ -75,6 +76,7 @@ function ADMMEnv(data, action_set;
         data_area,
         false,
         1,
+        rng 
     )
     reset!(env)
     env
@@ -93,10 +95,10 @@ function RLBase.reset!(env::ADMMEnv)
     env.iteration = 1
     env.action = env.params.baseline_alpha
     env.data_area = initialize_dopf(env.data, env.params.model_type, env.params.dopf_method, env.params.baseline_alpha, env.params.max_iteration, env.params.tol)
-    pol_residual_data, pol_data_area, pol_iteration, pol_converged = run_some_iterations(deepcopy(env.data_area), env.params.dopf_method, env.params.model_type, env.params.optimizer, copy(env.iteration), env.action, env.params.n_history)
+    pol_residual_data, agent_pol_residual_data, pol_data_area, pol_iteration, pol_converged = run_some_iterations(deepcopy(env.data_area), env.params.dopf_method, env.params.model_type, env.params.optimizer, copy(env.iteration), env.action, env.params.n_history, rng)
     env.data_area = pol_data_area 
     env.iteration = pol_iteration 
-    env.state = vcat(pol_residual_data["primal"],pol_residual_data["dual"])
+    env.state = vcat(agent_pol_residual_data["primal"],agent_pol_residual_data["dual"])
     env.done = false
     nothing
 end
@@ -108,8 +110,8 @@ function (env::ADMMEnv)(a::Int)
 end
 
 function _step!(env::ADMMEnv, alpha)
-    base_residual_data, base_data_area, base_iteration, base_converged = run_some_iterations(deepcopy(env.data_area), env.params.dopf_method, env.params.model_type, env.params.optimizer, copy(env.iteration), env.params.baseline_alpha, env.params.n_history)
-    pol_residual_data, pol_data_area, pol_iteration, pol_converged = run_some_iterations(deepcopy(env.data_area), env.params.dopf_method, env.params.model_type, env.params.optimizer, copy(env.iteration), alpha, env.params.n_history)
+    base_residual_data, agent_base_residual_data, base_data_area, base_iteration, base_converged = run_some_iterations(deepcopy(env.data_area), env.params.dopf_method, env.params.model_type, env.params.optimizer, copy(env.iteration), env.params.baseline_alpha, env.params.n_history, rng)
+    pol_residual_data, agent_pol_residual_data, pol_data_area, pol_iteration, pol_converged = run_some_iterations(deepcopy(env.data_area), env.params.dopf_method, env.params.model_type, env.params.optimizer, copy(env.iteration), alpha, env.params.n_history, rng)
     #Compute reward 
     Rb = (base_residual_data["primal"][end] - pol_residual_data["primal"][end])/base_residual_data["primal"][end] + (base_residual_data["dual"][end] - pol_residual_data["dual"][end])/base_residual_data["dual"][end]
     Rconv = 0 
@@ -122,7 +124,7 @@ function _step!(env::ADMMEnv, alpha)
         env.iteration >= env.params.max_iteration 
     env.data_area = pol_data_area 
     env.iteration = pol_iteration 
-    env.state = vcat(pol_residual_data["primal"],pol_residual_data["dual"])
+    env.state = vcat(agent_pol_residual_data["primal"],agent_pol_residual_data["dual"])
     nothing
 end
 

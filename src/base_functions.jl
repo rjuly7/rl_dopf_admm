@@ -25,12 +25,13 @@ function initialize_dopf(data, model_type, dopf_method, alpha, max_iteration, to
     return data_area 
 end
 
-function run_some_iterations(data_area::Dict{Int,Any}, dopf_method::Module, model_type::DataType, optimizer, iteration::Int, alpha::Int, iters_to_run::Int)
+function run_some_iterations(data_area::Dict{Int,Any}, dopf_method::Module, model_type::DataType, optimizer, iteration::Int, alpha::Int, iters_to_run::Int, rng)
     flag_convergence = false
     #We want to store the 2-norm of primal and dual residuals
     #at each iteration
     areas_id = get_areas_id(data_area)
-    residual_data = Dict("primal" => [], "dual" => []) 
+    reward_residual_data = Dict("primal" => [], "dual" => []) 
+    agent_residual_data = Dict(i => Dict("primal" => [], "dual" => []) for i in areas_id)
     for area in areas_id
         data_area[area]["parameter"]["alpha"] = alpha
     end
@@ -51,8 +52,12 @@ function run_some_iterations(data_area::Dict{Int,Any}, dopf_method::Module, mode
             primal_shared = data_area[area]["shared_variable"]
             primal_residuals[area] = sqrt(sum((primal_shared[i][j][k] - (data_area[area]["received_variable"][i][j][k] + primal_shared[i][j][k])/2)^2 for i in keys(primal_shared) for j in keys(primal_shared[i]) for k in keys(primal_shared[i][j]))) 
         end 
-        push!(residual_data["dual"], sqrt(sum(data_area[area]["dual_residual"][string(area)]^2 for area in areas_id)))
-        push!(residual_data["primal"], sqrt(sum(primal_residuals[area]^2 for area in areas_id)))
+        for area in areas_id
+            push!(agent_residual_data[area]["dual"], data_area[area]["dual_residual"][string(area)])
+            push!(agent_residual_data[area]["primal"], primal_residuals[area])
+        end
+        push!(reward_residual_data["dual"], sqrt(sum(data_area[area]["dual_residual"][string(area)]^2 for area in areas_id)))
+        push!(reward_residual_data["primal"], sqrt(sum(primal_residuals[area]^2 for area in areas_id)))
     
         # share solution with neighbors, the shared data is first obtained to facilitate distributed implementation
         for area in areas_id # sender subsystem
@@ -81,6 +86,7 @@ function run_some_iterations(data_area::Dict{Int,Any}, dopf_method::Module, mode
         iteration += 1
     end
 
-    return residual_data, data_area, iteration, flag_convergence #(flag_convergence && dual_convergence)
+    report_area_id = rand(rng, areas_id)
+    return reward_residual_data, agent_residual_data[report_area_id], data_area, iteration, flag_convergence #(flag_convergence && dual_convergence)
 end
 
