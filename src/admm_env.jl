@@ -62,10 +62,10 @@ function ADMMEnv(data, pq_action_set, vt_action_set, rng;
     action_space = Base.OneTo(total_actions) 
     state_space = Vector{ClosedInterval{AbstractFloat}}() 
     for i = 1:2*n_history
-        push!(state_space,ClosedInterval(0.0,5000.0))
+        push!(state_space,ClosedInterval(0.0,20000.0))
     end
     alpha = rand(action_space)
-    data_area = initialize_dopf(data, model_type, admm_methods, alpha, max_iteration, tol)
+    data_area = initialize_dopf(data, model_type, admm_methods, max_iteration, tol)
     env = ADMMEnv(
         params,
         action_space,
@@ -96,7 +96,7 @@ function RLBase.reset!(env::ADMMEnv)
     println()
     println()
     env.iteration = 1
-    env.data_area = initialize_dopf(env.data, env.params.model_type, adaptive_admm_methods, 500, env.params.max_iteration, env.params.tol)
+    env.data_area = initialize_dopf(env.data, env.params.model_type, adaptive_admm_methods, env.params.max_iteration, env.params.tol)
     pol_residual_data, agent_pol_residual_data, pol_data_area, pol_iteration, pol_converged = run_some_iterations(deepcopy(env.data_area), adaptive_admm_methods, env.params.model_type, env.params.optimizer, copy(env.iteration), env.params.baseline_alpha_pq, env.params.baseline_alpha_vt, env.params.n_history, rng)
     env.data_area = pol_data_area 
     env.iteration = pol_iteration 
@@ -117,10 +117,6 @@ function _step!(env::ADMMEnv, a)
     vt_idx = a - (pq_idx-1)*n_actions_vt 
     alpha_pq = env.pq_action_set[pq_idx]
     alpha_vt = env.vt_action_set[vt_idx]
-    println("a: ", a)
-    println("alpha_pq: ", alpha_pq)
-    println("alpha_vt: ", alpha_vt)
-    println()
     base_residual_data, agent_base_residual_data, base_data_area, base_iteration, base_converged = run_some_iterations(deepcopy(env.data_area), adaptive_admm_methods, env.params.model_type, env.params.optimizer, copy(env.iteration), env.params.baseline_alpha_pq, env.params.baseline_alpha_vt, env.params.n_history, rng)
     pol_residual_data, agent_pol_residual_data, pol_data_area, pol_iteration, pol_converged = run_some_iterations(deepcopy(env.data_area), adaptive_admm_methods, env.params.model_type, env.params.optimizer, copy(env.iteration), alpha_pq, alpha_vt, env.params.n_history, rng)
     #Compute reward 
@@ -139,3 +135,14 @@ function _step!(env::ADMMEnv, a)
     nothing
 end
 
+function test_baseline()
+    data_area = initialize_dopf(env.data, env.params.model_type, adaptive_admm_methods, env.params.max_iteration, env.params.tol)
+    data_area = run_to_end(data_area, env.params.baseline_alpha_pq, env.params.baseline_alpha_vt)
+    return data_area 
+end
+
+function test_policy(Q)
+    data_area = initialize_dopf(env.data, env.params.model_type, adaptive_admm_methods, env.params.max_iteration, env.params.tol)
+    data_area = run_to_end(data_area, Q, env.pq_action_set, env.vt_action_set, env.params.baseline_alpha_pq, env.params.baseline_alpha_vt, env.params.n_history)
+    return data_area 
+end

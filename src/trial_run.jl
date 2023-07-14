@@ -1,7 +1,3 @@
-path = "C:/Users/User/Documents/rl_admm"
-
-cd(path)
-using Pkg
 Pkg.activate(".")
 
 using ReinforcementLearning
@@ -17,11 +13,8 @@ rng = StableRNG(123)
 
 case_path = "$path/data/case14.m"
 data = parse_file(case_path)
-# pq_alpha_values = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
-# vt_alpha_values = [500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 5500, 7000]
-
-pq_alpha_values = [100, 200, 300, 400, 500]
-vt_alpha_values = [500, 1000, 1500, 2000, 2500]
+pq_alpha_values = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
+vt_alpha_values = [500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 5500, 7000]
 
 env = ADMMEnv(data, pq_alpha_values, vt_alpha_values, rng)
 ns, na = length(state(env)), length(action_space(env))
@@ -59,7 +52,7 @@ agent = Agent(
         explorer = EpsilonGreedyExplorer(
             kind = :exp,
             ϵ_stable = 0.01,
-            decay_steps = 100,
+            decay_steps = 200,
             rng = rng,
         ),
     ),
@@ -69,10 +62,21 @@ agent = Agent(
     ),
 )
 hook = ComposedHook(TotalRewardPerEpisode())
-run(agent, env, StopAfterStep(500), hook)
+run(agent, env, StopAfterStep(1500), hook)
 
 @info "stats for BasicDQNLearner" avg_reward = mean(hook[1].rewards) avg_fps = 1 / mean(hook[2].times)
 
 using Plots
 plot(hook[1].rewards, xlabel="Episode", ylabel="Reward", label="")
+
+
+#Compare to baseline 
+base_data_area = test_baseline()
+baseline_iterations = base_data_area[1]["counter"]["iteration"]
+Q = agent.policy.learner.target_approximator
+pol_data_area = test_policy(Q)
+policy_iterations = pol_data_area[1]["counter"]["iteration"]
+println("Baseline: ", baseline_iterations, "  policy: ", policy_iterations)
+
+
 
