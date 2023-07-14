@@ -25,7 +25,7 @@ function initialize_dopf(data, model_type, dopf_method, alpha, max_iteration, to
     return data_area 
 end
 
-function run_some_iterations(data_area::Dict{Int,Any}, dopf_method::Module, model_type::DataType, optimizer, iteration::Int, alpha::Int, iters_to_run::Int, rng)
+function run_some_iterations(data_area::Dict{Int,Any}, dopf_method::Module, model_type::DataType, optimizer, iteration::Int, alpha_pq::Int, alpha_vt::Int, iters_to_run::Int, rng)
     flag_convergence = false
     #We want to store the 2-norm of primal and dual residuals
     #at each iteration
@@ -33,7 +33,17 @@ function run_some_iterations(data_area::Dict{Int,Any}, dopf_method::Module, mode
     reward_residual_data = Dict("primal" => [], "dual" => []) 
     agent_residual_data = Dict(i => Dict("primal" => [], "dual" => []) for i in areas_id)
     for area in areas_id
-        data_area[area]["parameter"]["alpha"] = alpha
+        for neighbor in keys(data_area[area]["alpha"])
+            for opf_var in keys(data_area[area]["alpha"][neighbor])
+                for i in keys(data_area[area]["alpha"][neighbor][opf_var])
+                    if opf_var == "pt" || opf_var == "pf" || opf_var == "qt" || opf_var == "qf"
+                        data_area[area]["alpha"][neighbor][opf_var][i] = alpha_pq 
+                    else
+                        data_area[area]["alpha"][neighbor][opf_var][i] = alpha_vt
+                    end
+                end
+            end
+        end
     end
     stop_iteration = iteration + iters_to_run 
     while iteration < stop_iteration 

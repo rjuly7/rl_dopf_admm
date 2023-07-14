@@ -17,8 +17,13 @@ rng = StableRNG(123)
 
 case_path = "$path/data/case14.m"
 data = parse_file(case_path)
-alpha_values = [10, 50, 100, 250, 500, 1000, 1500, 2000]
-env = ADMMEnv(data, alpha_values,rng)
+# pq_alpha_values = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
+# vt_alpha_values = [500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 5500, 7000]
+
+pq_alpha_values = [100, 200, 300, 400, 500]
+vt_alpha_values = [500, 1000, 1500, 2000, 2500]
+
+env = ADMMEnv(data, pq_alpha_values, vt_alpha_values, rng)
 ns, na = length(state(env)), length(action_space(env))
 
 agent = Agent(
@@ -28,6 +33,7 @@ agent = Agent(
                 model = Chain(
                     Dense(ns, 256, relu; init = glorot_uniform(rng)),
                     Dense(256, 256, relu; init = glorot_uniform(rng)),
+                    Dense(256, 256, relu; init = glorot_uniform(rng)),
                     Dense(256, na; init = glorot_uniform(rng)),
                 ),
                 optimizer = Adam(),
@@ -35,6 +41,7 @@ agent = Agent(
             target_approximator = NeuralNetworkApproximator(
                 model = Chain(
                     Dense(ns, 256, relu; init = glorot_uniform(rng)),
+                    Dense(256, 256, relu; init = glorot_uniform(rng)),
                     Dense(256, 256, relu; init = glorot_uniform(rng)),
                     Dense(256, na; init = glorot_uniform(rng)),
                 ),
