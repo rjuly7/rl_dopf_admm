@@ -67,8 +67,6 @@ agent = Agent(
 hook = ComposedHook(TotalRewardPerEpisode())
 run(agent, env, StopAfterStep(2500), hook)
 
-@info "stats for BasicDQNLearner" avg_reward = mean(hook[1].rewards) avg_fps = 1 / mean(hook[2].times)
-
 using Plots
 plot(hook[1].rewards, xlabel="Episode", ylabel="Reward", label="")
 # dictionary to write
