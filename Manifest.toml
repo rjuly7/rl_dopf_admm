@@ -2,7 +2,7 @@
 
 julia_version = "1.8.2"
 manifest_format = "2.0"
-project_hash = "20be90c84bfc1409d91241e3823b35198d20c2f1"
+project_hash = "d409634adbce9d44205dcad8afb1bcda6c7af23f"
 
 [[deps.ASL_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -68,6 +68,11 @@ deps = ["LinearAlgebra", "Printf", "Random", "Test"]
 git-tree-sha1 = "a598ecb0d717092b5539dbbe890c98bac842b072"
 uuid = "ab4f0b2a-ad5b-11e8-123f-65d77653426b"
 version = "0.2.0"
+
+[[deps.BSON]]
+git-tree-sha1 = "2208958832d6e1b59e49f53697483a84ca8d664e"
+uuid = "fbb218c0-5317-5bc6-957e-2ee96dd4b1f0"
+version = "0.3.7"
 
 [[deps.BangBang]]
 deps = ["Compat", "ConstructionBase", "InitialValues", "LinearAlgebra", "Requires", "Setfield", "Tables"]

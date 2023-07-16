@@ -173,7 +173,6 @@ function run_to_end(data_area::Dict{Int,Any}, Q, pq_action_set, vt_action_set, a
             assign_alpha!(data_area[area], alphas[area]["pq"], alphas[area]["vt"])
         end
 
-        data_area = assign_alpha(data_area, areas_id, alpha_pq, alpha_vt)
         # solve local problem and update solution
         info = @capture_out begin
             for area in areas_id
