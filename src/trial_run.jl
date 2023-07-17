@@ -65,14 +65,14 @@ agent = Agent(
     ),
 )
 hook = ComposedHook(TotalRewardPerEpisode())
-run(agent, env, StopAfterStep(2500), hook)
+run(agent, env, StopAfterStep(2000), hook)
 
 using Plots
 plot(hook[1].rewards, xlabel="Episode", ylabel="Reward", label="")
 # dictionary to write
 reward_dict = Dict("rewards" => hook[1].rewards)
 # pass data as a json string (how it shall be displayed in a file)
-run_num = 2
+run_num = 1
 stringdata = JSON.json(reward_dict)
 # write the file with the stringdata variable information
 open("data/rewards/trial_$run_num.json", "w") do f
