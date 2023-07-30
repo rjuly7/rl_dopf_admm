@@ -16,10 +16,10 @@ rng = StableRNG(123)
 
 case_path = "data/case14.m"
 data = parse_file(case_path)
-pq_alpha_values = [200, 300, 400, 450, 500, 600, 700, 800, 900, 1000]
-vt_alpha_values = [1500, 2000, 2500, 3000, 3500, 4000, 4500, 5500, 6000, 7000]
+pq_alpha_values = [350, 400, 450, 500, 550, 600, 700, 800, 900, 1000, 1100]
+vt_alpha_values = [1500, 2000, 2500, 3000, 3500, 4000, 4500, 5500, 6000, 6500, 7000]
 
-env = ADMMEnv(data, pq_alpha_values, vt_alpha_values, rng, baseline_alpha_pq = 400, baseline_alpha_vt = 4000)
+env = ADMMEnv(data, pq_alpha_values, vt_alpha_values, rng, baseline_alpha_pq = 400, baseline_alpha_vt = 4000, alpha_update_freq = 5)
 ns, na = length(state(env)), length(action_space(env))
 
 agent = Agent(
@@ -45,9 +45,9 @@ agent = Agent(
             ),
             loss_func = mse,
             stack_size = nothing,
-            batch_size = 75,
+            batch_size = 200,
             update_horizon = 1,
-            min_replay_history = 100,
+            min_replay_history = 200,
             update_freq = 1,
             target_update_freq = 100,
             rng = rng,
@@ -55,7 +55,7 @@ agent = Agent(
         explorer = EpsilonGreedyExplorer(
             kind = :exp,
             ϵ_stable = 0.03,
-            decay_steps = 1500,
+            decay_steps = 1000,
             rng = rng,
         ),
     ),

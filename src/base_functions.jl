@@ -143,7 +143,7 @@ function run_to_end(data_area::Dict{Int,Any}, alpha_pq, alpha_vt;
     return data_area 
 end
 
-function run_to_end(data_area::Dict{Int,Any}, Q, pq_action_set, vt_action_set, alpha_pq, alpha_vt, n_history;
+function run_to_end(data_area::Dict{Int,Any}, Q, pq_action_set, vt_action_set, alpha_pq, alpha_vt, n_history, update_alpha_freq;
         dopf_method=adaptive_admm_methods, model_type=ACPPowerModel, optimizer=Ipopt.Optimizer, max_iteration=1000)
     flag_convergence = false
     #We want to store the 2-norm of primal and dual residuals
@@ -154,9 +154,9 @@ function run_to_end(data_area::Dict{Int,Any}, Q, pq_action_set, vt_action_set, a
     iteration = 1 
     while iteration < max_iteration && !flag_convergence
 
-        if mod(iteration,n_history) == 1 && iteration > 1
+        if mod(iteration-n_history-1,update_alpha_freq) == 0 && iteration >= n_history 
             for area in areas_id 
-                state = vcat(agent_residual_data[area]["primal"],agent_residual_data[area]["dual"])
+                state = vcat(agent_residual_data[area]["primal"][end-n_history+1:end],agent_residual_data[area]["dual"][end-n_history+1:end])
                 a = argmax(Q(state))
                 n_actions_vt = length(vt_action_set)
                 pq_idx = Int(ceil(a/n_actions_vt))
@@ -166,7 +166,6 @@ function run_to_end(data_area::Dict{Int,Any}, Q, pq_action_set, vt_action_set, a
                 println("pq: ", alphas[area]["pq"])
                 println("vt: ", alphas[area]["vt"])
             end
-            agent_residual_data = Dict(i => Dict("primal" => [], "dual" => []) for i in areas_id)
         end
 
         for area in areas_id
