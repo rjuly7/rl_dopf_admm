@@ -16,10 +16,10 @@ rng = StableRNG(123)
 
 case_path = "data/case14.m"
 data = parse_file(case_path)
-pq_alpha_values = [350, 400, 450, 500, 550, 600, 700, 800, 900, 1000, 1100]
-vt_alpha_values = [1500, 2000, 2500, 3000, 3500, 4000, 4500, 5500, 6000, 6500, 7000]
+pq_alpha_values = 400:100:1200
+vt_alpha_values = 1500:100:8000
 
-env = ADMMEnv(data, pq_alpha_values, vt_alpha_values, rng, baseline_alpha_pq = 400, baseline_alpha_vt = 4000, alpha_update_freq = 5)
+env = ADMMEnv(data, pq_alpha_values, vt_alpha_values, rng, baseline_alpha_pq = 400, baseline_alpha_vt = 4000, alpha_update_freq = 10)
 ns, na = length(state(env)), length(action_space(env))
 
 agent = Agent(
@@ -47,15 +47,15 @@ agent = Agent(
             stack_size = nothing,
             batch_size = 200,
             update_horizon = 1,
-            min_replay_history = 200,
+            min_replay_history = 100,
             update_freq = 1,
             target_update_freq = 100,
             rng = rng,
         ),
         explorer = EpsilonGreedyExplorer(
             kind = :exp,
-            ϵ_stable = 0.03,
-            decay_steps = 1000,
+            ϵ_stable = 0.05,
+            decay_steps = 1500,
             rng = rng,
         ),
     ),
@@ -65,7 +65,7 @@ agent = Agent(
     ),
 )
 hook = ComposedHook(TotalRewardPerEpisode())
-run(agent, env, StopAfterStep(2000), hook)
+run(agent, env, StopAfterStep(1500), hook)
 
 using Plots
 plot(hook[1].rewards, xlabel="Episode", ylabel="Reward", label="")
@@ -88,3 +88,4 @@ policy_iterations = pol_data_area[1]["counter"]["iteration"]
 println("Baseline: ", baseline_iterations, "  policy: ", policy_iterations)
 
 bson("data/trained_Qs/trial_$run_num.bson", Dict("Q" => Q))
+

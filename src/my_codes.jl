@@ -14,3 +14,20 @@ pol_residual_data, agent_pol_residual_data, pol_data_area, pol_iteration, pol_co
 plot([pol_residual_data["primal"],pol_residual_data["dual"]], label=["primal" "dual"], yscale=:log10)
 
 push!(env.rewardPerStep,Dict("reward" => env.reward, "pq" => alpha_pq, "vt" => alpha_vt, "state" => env.state, "data_area" => save_data_area, "iteration" => save_iteration))
+
+data_area, alpha_trace = quick_adaptive_test(data)
+
+pq = []
+vt = [] 
+for iter =1:length(alpha_trace[1])
+    vals = alpha_trace[1][iter]["2"]
+    for var_type in keys(vals)
+        for (b,alph) in vals[var_type]
+            if var_type == "pt" || var_type == "pf" || var_type == "qf" || var_type == "qt"
+                push!(pq, alph)
+            else
+                push!(vt,alph)
+            end
+        end
+    end
+end

@@ -152,6 +152,10 @@ function _step!(env::ADMMEnv, a)
     end
     if (Rb + Rconv) < -200
         env.reward = -200
+        println("#########")
+        println("Clipping")
+        println("##########")
+        #env.reward = Rb + Rconv 
     else
         env.reward = Rb + Rconv 
     end
