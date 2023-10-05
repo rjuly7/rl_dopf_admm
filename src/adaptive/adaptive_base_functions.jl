@@ -104,6 +104,8 @@ end
 function run_to_end(data_area::Dict{Int,Any}, adaptive_params;
          dopf_method=adaptive_admm_methods, model_type=ACPPowerModel, optimizer=Ipopt.Optimizer, max_iteration=1000)    
     flag_convergence = false
+    areas_id = get_areas_id(data_area)
+
     for area in areas_id 
         data_area[area]["parameter"]["eta_inc"] = adaptive_params[1]
         data_area[area]["parameter"]["eta_dec"] = adaptive_params[2]
@@ -112,7 +114,6 @@ function run_to_end(data_area::Dict{Int,Any}, adaptive_params;
     end
     #We want to store the 2-norm of primal and dual residuals
     #at each iteration
-    areas_id = get_areas_id(data_area)
     iteration = 1 
     while iteration < max_iteration && !flag_convergence
         # solve local problem and update solution
@@ -154,13 +155,14 @@ function run_to_end(data_area::Dict{Int,Any}, Q, action_set, baselines, n_histor
     flag_convergence = false
     #We want to store the 2-norm of primal and dual residuals
     #at each iteration
+    areas_id = get_areas_id(data_area)  
+
     for area in areas_id 
         data_area[area]["parameter"]["eta_inc"] = baselines[1]
         data_area[area]["parameter"]["eta_dec"] = baselines[2]
         data_area[area]["parameter"]["mu_inc"] = baselines[3]
         data_area[area]["parameter"]["mu_dec"] = baselines[4]
     end
-    areas_id = get_areas_id(data_area)  
     agent_residual_data = Dict(i => Dict("primal" => [], "dual" => []) for i in areas_id)
     iteration = 1 
     while iteration < max_iteration && !flag_convergence
@@ -222,7 +224,7 @@ function run_to_end(data_area::Dict{Int,Any}, Q, action_set, baselines, n_histor
     return data_area 
 end
 
-function quick_adaptive_test(data;
+function quick_adaptive_test(data, dual_measure=false;
     dopf_method=adaptive_admm_methods, model_type=ACPPowerModel, optimizer=Ipopt.Optimizer, max_iteration=1000, tol=1e-4) 
     
     areas_id = get_areas_id(data)
@@ -233,6 +235,7 @@ function quick_adaptive_test(data;
     # initilize distributed power model parameters
     for area in areas_id
         dopf_method.initialize_method(data_area[area], model_type; max_iteration=max_iteration, tol=tol)
+        #dopf_method.initialize_method(data_area[area], model_type; termination_measure= "mismatch_dual_residual", max_iteration=max_iteration, tol=tol)
     end
 
     # initialize the algorithms global counters
