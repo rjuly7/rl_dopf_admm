@@ -10,7 +10,7 @@ using PowerModelsADA
 using Ipopt 
 using JSON 
 using BSON 
-include("admm_env.jl")
+include("original/admm_env.jl")
 
 rng = StableRNG(123)
 
@@ -65,7 +65,7 @@ agent = Agent(
     ),
 )
 hook = ComposedHook(TotalRewardPerEpisode())
-run(agent, env, StopAfterStep(1500), hook)
+run(agent, env, StopAfterStep(100), hook)
 
 using Plots
 plot(hook[1].rewards, xlabel="Episode", ylabel="Reward", label="")
