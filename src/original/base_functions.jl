@@ -48,6 +48,9 @@ function run_some_iterations(data_area::Dict{Int,Any}, dopf_method::Module, mode
     reward_residual_data = Dict("primal" => [], "dual" => []) 
     agent_residual_data = Dict(i => Dict("primal" => [], "dual" => []) for i in areas_id)
     stop_iteration = iteration + iters_to_run 
+    my_flag_convergence = false 
+    eabs = 1e-5
+    erel = 1e-4 
     while iteration < stop_iteration 
         # solve local problem and update solution
         for area in areas_id 
@@ -81,19 +84,34 @@ function run_some_iterations(data_area::Dict{Int,Any}, dopf_method::Module, mode
         end
         push!(reward_residual_data["dual"], sqrt(sum(data_area[area]["dual_residual"][string(area)]^2 for area in areas_id)))
         push!(reward_residual_data["primal"], sqrt(sum(data_area[area]["mismatch"][string(area)]^2 for area in areas_id)))
+        
+        cur_pri_norm = LinearAlgebra.norm([value for area in areas_id for i in keys(data_area[area]["shared_variable"]) for j in keys(data_area[area]["shared_variable"][i]) for (k,value) in data_area[area]["shared_variable"][i][j]],2)
+        cur_du_norm = LinearAlgebra.norm([value for area in areas_id for i in keys(data_area[area]["dual_variable"]) for j in keys(data_area[area]["dual_variable"][i]) for (k,value) in data_area[area]["dual_variable"][i][j]],2)
+        num_shared = sum([1 for area in areas_id for i in keys(data_area[area]["shared_variable"]) for j in keys(data_area[area]["shared_variable"][i]) for (k,value) in data_area[area]["shared_variable"][i][j]])
+        num_dual = sum([1 for area in areas_id for i in keys(data_area[area]["dual_variable"]) for j in keys(data_area[area]["dual_variable"][i]) for (k,value) in data_area[area]["dual_variable"][i][j]])
+        if reward_residual_data["primal"][end] <= sqrt(num_shared)*eabs + erel*cur_pri_norm
+            if reward_residual_data["dual"][end] <= sqrt(num_dual)*eabs + erel*cur_du_norm
+                my_flag_convergence = true 
+            end
+        end
     
         print_level = 1
         # print solution
-        print("Converged: ", flag_convergence, "   ")
+        print_level = 1
+        # print solution
         print_iteration(data_area, print_level, [info])
+        println("pri: ", reward_residual_data["primal"][end], "  du: ", reward_residual_data["dual"][end])
+        println("epri: ", sqrt(num_shared)*eabs + erel*cur_pri_norm, "  edu: ", sqrt(num_dual)*eabs + erel*cur_du_norm)
+        println()
         # check global convergence and update iteration counters
         flag_convergence = update_global_flag_convergence(data_area)
+        print("Converged: ", my_flag_convergence, "   ")
 
         iteration += 1
     end
 
     report_area_id = rand(rng, areas_id)
-    return reward_residual_data, agent_residual_data[report_area_id], data_area, iteration, flag_convergence #(flag_convergence && dual_convergence)
+    return reward_residual_data, agent_residual_data[report_area_id], data_area, iteration, my_flag_convergence #(flag_convergence && dual_convergence)
 end
 
 
@@ -105,7 +123,12 @@ function run_to_end(data_area::Dict{Int,Any}, alpha_pq, alpha_vt;
     #at each iteration
     areas_id = get_areas_id(data_area)
     iteration = 1 
-    while iteration < max_iteration && !flag_convergence
+    my_flag_convergence = false 
+    eabs = 1e-5 
+    erel = 1e-4 
+    reward_residual_data = Dict("primal" => [], "dual" => []) 
+
+    while iteration < max_iteration && !my_flag_convergence #!flag_convergence
         # solve local problem and update solution
         for area in areas_id 
             assign_alpha!(data_area[area], alpha_pq, alpha_vt)
@@ -131,12 +154,27 @@ function run_to_end(data_area::Dict{Int,Any}, alpha_pq, alpha_vt;
             save_solution!(data_area[area])
         end
 
+        push!(reward_residual_data["dual"], sqrt(sum(data_area[area]["dual_residual"][string(area)]^2 for area in areas_id)))
+        push!(reward_residual_data["primal"], sqrt(sum(data_area[area]["mismatch"][string(area)]^2 for area in areas_id)))
+
+        # check global convergence and update iteration counters
+        flag_convergence = update_global_flag_convergence(data_area)
+        cur_pri_norm = LinearAlgebra.norm([value for area in areas_id for i in keys(data_area[area]["shared_variable"]) for j in keys(data_area[area]["shared_variable"][i]) for (k,value) in data_area[area]["shared_variable"][i][j]],2)
+        cur_du_norm = LinearAlgebra.norm([value for area in areas_id for i in keys(data_area[area]["dual_variable"]) for j in keys(data_area[area]["dual_variable"][i]) for (k,value) in data_area[area]["dual_variable"][i][j]],2)
+        num_shared = sum([1 for area in areas_id for i in keys(data_area[area]["shared_variable"]) for j in keys(data_area[area]["shared_variable"][i]) for (k,value) in data_area[area]["shared_variable"][i][j]])
+        num_dual = sum([1 for area in areas_id for i in keys(data_area[area]["dual_variable"]) for j in keys(data_area[area]["dual_variable"][i]) for (k,value) in data_area[area]["dual_variable"][i][j]])
+        if reward_residual_data["primal"][end] <= sqrt(num_shared)*eabs + erel*cur_pri_norm
+            if reward_residual_data["dual"][end] <= sqrt(num_dual)*eabs + erel*cur_du_norm
+                my_flag_convergence = true 
+            end
+        end
         print_level = 1
         # print solution
         print_iteration(data_area, print_level, [info])
-        # check global convergence and update iteration counters
-        flag_convergence = update_global_flag_convergence(data_area)
-
+        println("pri: ", reward_residual_data["primal"][end], "  du: ", reward_residual_data["dual"][end])
+        println("epri: ", sqrt(num_shared)*eabs + erel*cur_pri_norm, "  edu: ", sqrt(num_dual)*eabs + erel*cur_du_norm)
+        println(my_flag_convergence)
+        println()
         iteration += 1
     end
 
@@ -152,7 +190,12 @@ function run_to_end(data_area::Dict{Int,Any}, Q, pq_action_set, vt_action_set, a
     alphas = Dict(i => Dict("pq" => alpha_pq, "vt" => alpha_vt) for i in areas_id)
     agent_residual_data = Dict(i => Dict("primal" => [], "dual" => []) for i in areas_id)
     iteration = 1 
-    while iteration < max_iteration && !flag_convergence
+    eabs = 1e-5 
+    erel = 1e-4 
+    my_flag_convergence = false 
+    reward_residual_data = Dict("primal" => [], "dual" => []) 
+
+    while iteration < max_iteration && !my_flag_convergence #!flag_convergence
 
         if mod(iteration-n_history-1,update_alpha_freq) == 0 && iteration >= n_history 
             for area in areas_id 
@@ -194,18 +237,32 @@ function run_to_end(data_area::Dict{Int,Any}, Q, pq_action_set, vt_action_set, a
             save_solution!(data_area[area])
         end
 
+        push!(reward_residual_data["dual"], sqrt(sum(data_area[area]["dual_residual"][string(area)]^2 for area in areas_id)))
+        push!(reward_residual_data["primal"], sqrt(sum(data_area[area]["mismatch"][string(area)]^2 for area in areas_id)))
+
         #Record the residuals 
         for area in areas_id
             push!(agent_residual_data[area]["dual"], data_area[area]["dual_residual"][string(area)])
             push!(agent_residual_data[area]["primal"], data_area[area]["mismatch"][string(area)])
         end        
     
+        # check global convergence and update iteration counters
+        flag_convergence = update_global_flag_convergence(data_area)
+        cur_pri_norm = LinearAlgebra.norm([value for area in areas_id for i in keys(data_area[area]["shared_variable"]) for j in keys(data_area[area]["shared_variable"][i]) for (k,value) in data_area[area]["shared_variable"][i][j]],2)
+        cur_du_norm = LinearAlgebra.norm([value for area in areas_id for i in keys(data_area[area]["dual_variable"]) for j in keys(data_area[area]["dual_variable"][i]) for (k,value) in data_area[area]["dual_variable"][i][j]],2)
+        num_shared = sum([1 for area in areas_id for i in keys(data_area[area]["shared_variable"]) for j in keys(data_area[area]["shared_variable"][i]) for (k,value) in data_area[area]["shared_variable"][i][j]])
+        num_dual = sum([1 for area in areas_id for i in keys(data_area[area]["dual_variable"]) for j in keys(data_area[area]["dual_variable"][i]) for (k,value) in data_area[area]["dual_variable"][i][j]])
+        if reward_residual_data["primal"][end] <= sqrt(num_shared)*eabs + erel*cur_pri_norm
+            if reward_residual_data["dual"][end] <= sqrt(num_dual)*eabs + erel*cur_du_norm
+                my_flag_convergence = true 
+            end
+        end
         print_level = 1
         # print solution
         print_iteration(data_area, print_level, [info])
-        # check global convergence and update iteration counters
-        flag_convergence = update_global_flag_convergence(data_area)
-
+        println("pri: ", reward_residual_data["primal"][end], "  du: ", reward_residual_data["dual"][end])
+        println("epri: ", sqrt(num_shared)*eabs + erel*cur_pri_norm, "  edu: ", sqrt(num_dual)*eabs + erel*cur_du_norm)
+        println()
         iteration += 1
     end
 

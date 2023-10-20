@@ -14,7 +14,7 @@ include("original/admm_env.jl")
 
 rng = StableRNG(123)
 
-case_path = "data/case14.m"
+case_path = "data/case118_3.m"
 data = parse_file(case_path)
 pq_alpha_values = 400:100:1200
 vt_alpha_values = 1500:100:8000
@@ -55,7 +55,7 @@ agent = Agent(
         explorer = EpsilonGreedyExplorer(
             kind = :exp,
             ϵ_stable = 0.05,
-            decay_steps = 1500,
+            decay_steps = 800,
             rng = rng,
         ),
     ),
@@ -65,7 +65,7 @@ agent = Agent(
     ),
 )
 hook = ComposedHook(TotalRewardPerEpisode())
-run(agent, env, StopAfterStep(100), hook)
+run(agent, env, StopAfterStep(1000), hook)
 
 using Plots
 plot(hook[1].rewards, xlabel="Episode", ylabel="Reward", label="")
