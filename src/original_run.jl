@@ -19,15 +19,21 @@ data = parse_file(case_path)
 pq_alpha_values = [200, 350, 400, 450, 600, 800]
 vt_alpha_values = [2800, 3200, 3600, 3800, 4000, 4200, 4600]
 
-env = ADMMEnv(data, pq_alpha_values, vt_alpha_values, rng, baseline_alpha_pq = 400, baseline_alpha_vt = 4000, alpha_update_freq = 10)
+env = ADMMEnv(data, pq_alpha_values, vt_alpha_values, rng, baseline_alpha_pq = 400, baseline_alpha_vt = 4000, alpha_update_freq = 5)
 ns, na = length(state(env)), length(action_space(env))
 
 run_num = 1
 
-##########This is the code for making an agent, starting from scratch##############
+########## This is the code for loading a saved agent to continue training ##############
 #######################################################################
 ######################################################
-########################################
+#####################################
+#agent = BSON.load("data/saved_agents/agent_$run_num.bson")["agent"]
+
+########## This is the code for making a new agent, starting from scratch ##############
+#######################################################################
+######################################################
+#####################################
 agent = Agent(
     policy = QBasedPolicy(
         learner = DQNLearner(
@@ -61,7 +67,7 @@ agent = Agent(
         explorer = EpsilonGreedyExplorer(
             kind = :exp,
             ϵ_init = 1,
-            ϵ_stable = 0.5,
+            ϵ_stable = 0.2,
             decay_steps = 10000,
             rng = rng,
         ),
@@ -71,50 +77,13 @@ agent = Agent(
         state = Vector{Float32} => (ns,),
     ),
 )
-
-
-##########This is the code for making an agent, reloading a previously trained NN##############
-#################################################################################
-######################################################################
-######################################################
-# Qs = BSON.load("data/trained_Qs/trial_$run_num.bson")
-# agent = Agent(
-#     policy = QBasedPolicy(
-#         learner = DQNLearner(
-#             approximator = NeuralNetworkApproximator(
-#                 model = Qs["Q"],
-#                 optimizer = Adam(),
-#             ),
-#             target_approximator = NeuralNetworkApproximator(
-#                 model = Qs["Qt"],
-#                 optimizer = Adam(),
-#             ),
-#             loss_func = mse,
-#             stack_size = nothing,
-#             batch_size = 200,
-#             update_horizon = 1,
-#             min_replay_history = 450,
-#             update_freq = 2,
-#             target_update_freq = 50,
-#             rng = rng,
-#         ),
-#         explorer = EpsilonGreedyExplorer(
-#             kind = :exp,
-#             ϵ_init = 0.5,
-#             ϵ_stable = 0.04,
-#             decay_steps = 10000,
-#             rng = rng,
-#         ),
-#     ),
-#     trajectory = CircularArraySARTTrajectory(
-#         capacity = 50000,
-#         state = Vector{Float32} => (ns,),
-#     ),
-# )
-
-
-
 agent.policy.learner.sampler.γ = 0.97 #vary between (0.8,0.99)
+
+######################
+##########################################
+###############################################################
+
+
 hook = ComposedHook(TotalRewardPerEpisode())
 run(agent, env, StopAfterStep(10000), hook)
 
@@ -142,4 +111,5 @@ policyt_iterations = pol_data_area[1]["counter"]["iteration"]
 policy_iterations = polt_data_area[1]["counter"]["iteration"]
 println("Baseline: ", baseline_iterations, "  policy with target: ", policyt_iterations, "  policy not target: ", policy_iterations)
 
-bson("data/trained_Qs/trial_$run_num.bson", Dict("Q" => Q, "Qt" => Qt))
+bson("data/saved_agents/agent_$run_num.bson", Dict("agent" => agent))
+bson("data/saved_agents/trained_Qs/trial_$run_num.bson", Dict("Q" => Q, "Qt" => Qt))

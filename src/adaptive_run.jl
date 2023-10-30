@@ -24,6 +24,12 @@ ns, na = length(state(env)), length(action_space(env))
 
 run_num = 1
 
+########## This is the code for loading a saved agent to continue training ##############
+#######################################################################
+######################################################
+#####################################
+#agent = BSON.load("data/saved_agents/adaptive_agent_$run_num.bson")["agent"]
+
 ##########This is the code for making an agent, starting from scratch##############
 #######################################################################
 ######################################################
@@ -61,7 +67,7 @@ agent = Agent(
         explorer = EpsilonGreedyExplorer(
             kind = :exp,
             ϵ_init = 1,
-            ϵ_stable = 0.5,
+            ϵ_stable = 0.2,
             decay_steps = 10000,
             rng = rng,
         ),
@@ -73,50 +79,9 @@ agent = Agent(
 )
 
 
-##########This is the code for making an agent, reloading a previously trained NN##############
-#################################################################################
-######################################################################
-######################################################
-# Qs = BSON.load("data/trained_Qs/adaptive_trial_$run_num.bson")
-# agent = Agent(
-#     policy = QBasedPolicy(
-#         learner = DQNLearner(
-#             approximator = NeuralNetworkApproximator(
-#                 model = Qs["Q"],
-#                 optimizer = Adam(),
-#             ),
-#             target_approximator = NeuralNetworkApproximator(
-#                 model = Qs["Qt"],
-#                 optimizer = Adam(),
-#             ),
-#             loss_func = mse,
-#             stack_size = nothing,
-#             batch_size = 200,
-#             update_horizon = 1,
-#             min_replay_history = 450,
-#             update_freq = 2,
-#             target_update_freq = 50,
-#             rng = rng,
-#         ),
-#         explorer = EpsilonGreedyExplorer(
-#             kind = :exp,
-#             ϵ_init = 0.5,
-#             ϵ_stable = 0.04,
-#             decay_steps = 10000,
-#             rng = rng,
-#         ),
-#     ),
-#     trajectory = CircularArraySARTTrajectory(
-#         capacity = 50000,
-#         state = Vector{Float32} => (ns,),
-#     ),
-# )
-
-
-
 agent.policy.learner.sampler.γ = 0.97 #vary between (0.8,0.99)
 hook = ComposedHook(TotalRewardPerEpisode())
-run(agent, env, StopAfterStep(10000), hook)
+run(agent, env, StopAfterStep(30), hook)
 
 using Plots
 plot(hook[1].rewards, xlabel="Episode", ylabel="Reward", label="")
@@ -142,4 +107,5 @@ policyt_iterations = pol_data_area[1]["counter"]["iteration"]
 policy_iterations = polt_data_area[1]["counter"]["iteration"]
 println("Baseline: ", baseline_iterations, "  policy with target: ", policyt_iterations, "  policy not target: ", policy_iterations)
 
+bson("data/saved_agents/adaptive_agent_$run_num.bson", Dict("agent" => agent))
 bson("data/trained_Qs/adaptive_trial_$run_num.bson", Dict("Q" => Q, "Qt" => Qt))
