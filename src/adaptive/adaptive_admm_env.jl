@@ -3,43 +3,53 @@ include("util.jl")
 using IntervalSets
 using Ipopt 
 
-struct ADMMEnvParams
+struct AdaptiveADMMEnvParams
     tol::AbstractFloat
+    du_tol::AbstractFloat 
     max_iteration::Int 
     n_history::Int 
-    initial_alpha::Int
-    baselines::Vector{AbstractFloat} #(eta_inc,eta_dec,mu_inc,mu_dec)
+    baseline_alpha_pq::Int 
+    baseline_alpha_vt::Int 
+    baseline_tau_inc::AbstractFloat 
+    baseline_tau_dec::AbstractFloat 
     model_type::DataType
     optimizer 
-    alpha_update_freq::Int 
+    tau_update_freq::Int 
 end
 
-function makeADMMEnvParams(
+function doAdaptiveADMMEnvParams(
     tol,
+    du_tol,
     max_iteration,
     n_history,
-    initial_alpha,
-    baselines,
+    baseline_alpha_pq,
+    baseline_alpha_vt,
+    baseline_tau_inc,
+    baseline_tau_dec,
     model_type,
     optimizer,
-    alpha_update_freq
+    tau_update_freq
 )
-    return ADMMEnvParams(
+    return AdaptiveADMMEnvParams(
         tol,
+        du_tol,
         max_iteration,
         n_history,
-        initial_alpha,
-        baselines,
+        baseline_alpha_pq,
+        baseline_alpha_vt,
+        baseline_tau_inc,
+        baseline_tau_dec,
         model_type,
         optimizer,
-        alpha_update_freq
+        tau_update_freq
     )
 end 
 
-mutable struct ADMMEnv <: AbstractEnv
-    params::ADMMEnvParams
+mutable struct AdaptiveADMMEnv <: AbstractEnv
+    params::AdaptiveADMMEnvParams
     action_space::Base.OneTo{Int}
-    action_set::Vector{Vector{AbstractFloat}}
+    tau_inc_action_set::Vector{AbstractFloat}
+    tau_dec_action_set::Vector{AbstractFloat}
     observation_space::Space{Vector{ClosedInterval{AbstractFloat}}}
     state::Vector{AbstractFloat}
     action::Int 
@@ -52,34 +62,36 @@ mutable struct ADMMEnv <: AbstractEnv
     residual_history_buffer::Dict{String,Any}
 end
 
-function ADMMEnv(data, action_set, rng;
+function AdaptiveADMMEnv(data, tau_inc_action_set, tau_dec_action_set, rng;
     model_type = ACPPowerModel,
     tol = 1e-4,
+    du_tol=0.1,
     max_iteration = 1000,
     n_history = 20,
-    initial_alpha=1000,
-    baselines = [0.1,0.1,1.1,1.1],
+    baseline_alpha_pq = 400,
+    baseline_alpha_vt = 4000,
+    baseline_tau_inc = 0,
+    baseline_tau_dec = 0,
     optimizer = Ipopt.Optimizer,
-    alpha_update_freq = 10
+    tau_update_freq = 10
 )
-    println("here")
-    println(tol, " ", max_iteration, " ", n_history, " ", initial_alpha, " ", baselines, " ", model_type, " ", optimizer, " ", alpha_update_freq)
-    params = makeADMMEnvParams(tol, max_iteration, n_history, initial_alpha, baselines, model_type, optimizer, alpha_update_freq)
-    println("all done")
-    total_actions = sum([1 for i in eachindex(action_set) for j in eachindex(action_set[i])])
+    params = doAdaptiveADMMEnvParams(tol, du_tol, max_iteration, n_history, baseline_alpha_pq, baseline_alpha_vt, baseline_tau_inc, baseline_tau_dec, model_type, optimizer, tau_update_freq)
+    total_actions = length(tau_inc_action_set)*length(tau_dec_action_set)
     action_space = Base.OneTo(total_actions) 
     state_space = Vector{ClosedInterval{AbstractFloat}}() 
     for i = 1:2*n_history
-        push!(state_space,ClosedInterval(0.0,20000.0))
+        push!(state_space,ClosedInterval(0.0,1.0))
     end
-    data_area = initialize_dopf(data, model_type, admm_methods, max_iteration, tol, initial_alpha)
-    env = ADMMEnv(
+    tau_a = rand(action_space)
+    data_area = initialize_dopf(data, model_type, adaptive_admm_methods, max_iteration, tol, du_tol, baseline_alpha_pq, baseline_alpha_vt)
+    env = AdaptiveADMMEnv(
         params,
         action_space,
-        action_set,
+        tau_inc_action_set,
+        tau_dec_action_set,
         Space(state_space),
         ones(Float64, 2*n_history),
-        1,
+        tau_a,
         0,
         data,
         data_area,
@@ -92,29 +104,29 @@ function ADMMEnv(data, action_set, rng;
     env
 end
 
-RLBase.action_space(env::ADMMEnv) = env.action_space
-RLBase.state_space(env::ADMMEnv) = env.observation_space
-RLBase.reward(env::ADMMEnv) = env.reward 
-RLBase.is_terminated(env::ADMMEnv) = env.done
-RLBase.state(env::ADMMEnv) = env.state
+RLBase.action_space(env::AdaptiveADMMEnv) = env.action_space
+RLBase.state_space(env::AdaptiveADMMEnv) = env.observation_space
+RLBase.reward(env::AdaptiveADMMEnv) = env.reward 
+RLBase.is_terminated(env::AdaptiveADMMEnv) = env.done
+RLBase.state(env::AdaptiveADMMEnv) = env.state
 
-function RLBase.reset!(env::ADMMEnv) 
+function RLBase.reset!(env::AdaptiveADMMEnv) 
     println("Resetting!!!")
     println()
     println()
     env.iteration = 1
-    env.data_area = initialize_dopf(env.data, env.params.model_type, adaptive_admm_methods, env.params.max_iteration, env.params.tol, env.params.initial_alpha)
-    pol_residual_data, agent_pol_residual_data, pol_data_area, pol_iteration, pol_converged = run_some_iterations(deepcopy(env.data_area), adaptive_admm_methods, env.params.model_type, env.params.optimizer, copy(env.iteration), env.params.baselines, env.params.n_history, rng)
+    env.data_area = initialize_dopf(env.data, env.params.model_type, adaptive_admm_methods, env.params.max_iteration, env.params.tol, env.params.du_tol, env.params.baseline_alpha_pq, env.params.baseline_alpha_vt)
+    pol_residual_data, agent_pol_residual_data, pol_data_area, pol_iteration, pol_converged, conv_iter = run_some_iterations(deepcopy(env.data_area), adaptive_admm_methods, env.params.model_type, env.params.optimizer, copy(env.iteration), env.params.baseline_tau_inc, env.params.baseline_tau_dec, env.params.n_history, rng)
     env.data_area = pol_data_area 
     env.iteration = pol_iteration 
-    env.state = vcat(agent_pol_residual_data["primal"],agent_pol_residual_data["dual"])
+    env.state = vcat(sigmoid_norm_primal(agent_pol_residual_data["primal"]),sigmoid_norm_dual(agent_pol_residual_data["dual"]))
     env.residual_history_buffer["primal"] = agent_pol_residual_data["primal"]
     env.residual_history_buffer["dual"] = agent_pol_residual_data["dual"]
     env.done = false
     nothing
 end
 
-function (env::ADMMEnv)(a::Int)
+function (env::AdaptiveADMMEnv)(a::Int)
     @assert a in env.action_space
     env.action = a
     _step!(env, a)
@@ -135,22 +147,26 @@ function update_residual_history(residual_history_buffer, new_residual_data, ite
     return residual_history_buffer, state 
 end
 
-function _step!(env::ADMMEnv, a)
-    n_actions = Dict(i => length(env.action_set[i]) for i in eachindex(env.action_set))
-    action_idcs = get_action_idcs(a,n_actions)
-    cur_actions = [env.action_set[i][action_idcs[i]] for i in eachindex(env.action_set)]
+function _step!(env::AdaptiveADMMEnv, a)
+    n_actions_tau_dec = length(env.tau_dec_action_set)
+    tau_inc_idx = Int(ceil(a/n_actions_tau_dec))
+    tau_dec_idx = a - (tau_inc_idx-1)*n_actions_tau_dec 
+    tau_inc = env.tau_inc_action_set[tau_inc_idx]
+    tau_dec = env.tau_dec_action_set[tau_dec_idx]
     save_data_area = deepcopy(env.data_area)
     save_iteration = deepcopy(env.iteration)
-    base_residual_data, agent_base_residual_data, base_data_area, base_iteration, base_converged = run_some_iterations(deepcopy(env.data_area), adaptive_admm_methods, env.params.model_type, env.params.optimizer, copy(env.iteration), env.params.baselines, env.params.n_history, rng)
-    pol_residual_data, agent_pol_residual_data, pol_data_area, pol_iteration, pol_converged = run_some_iterations(deepcopy(env.data_area), adaptive_admm_methods, env.params.model_type, env.params.optimizer, copy(env.iteration), cur_actions, env.params.n_history, rng)
+    base_residual_data, agent_base_residual_data, base_data_area, base_iteration, base_converged, base_conv_iter = run_some_iterations(deepcopy(env.data_area), adaptive_admm_methods, env.params.model_type, env.params.optimizer, copy(env.iteration), env.params.baseline_tau_inc, env.params.baseline_tau_dec, env.params.tau_update_freq, rng)
+    pol_residual_data, agent_pol_residual_data, pol_data_area, pol_iteration, pol_converged, pol_conv_iter = run_some_iterations(deepcopy(env.data_area), adaptive_admm_methods, env.params.model_type, env.params.optimizer, copy(env.iteration), tau_inc, tau_dec, env.params.tau_update_freq, rng)
     #Compute reward 
     Rb = (base_residual_data["primal"][end] - pol_residual_data["primal"][end])/base_residual_data["primal"][end] + (base_residual_data["dual"][end] - pol_residual_data["dual"][end])/base_residual_data["dual"][end]
+    println(a, " ", tau_inc, " ", tau_dec)
+    println((base_residual_data["primal"][end] - pol_residual_data["primal"][end])/base_residual_data["primal"][end], "   ", (base_residual_data["dual"][end] - pol_residual_data["dual"][end])/base_residual_data["dual"][end])
     Rconv = 0 
     if pol_converged
-        Rconv = 200
+        Rconv = 100 + (200 - pol_conv_iter)
     end
-    if (Rb + Rconv) < -200
-        env.reward = -200
+    if (Rb + Rconv) < -100
+        env.reward = -100
         println("#########")
         println("Clipping")
         println("##########")
@@ -163,20 +179,20 @@ function _step!(env::ADMMEnv, a)
         env.iteration >= env.params.max_iteration 
     env.data_area = pol_data_area 
     env.iteration = pol_iteration 
-    env.residual_history_buffer["primal"], primal_state = update_residual_history(env.residual_history_buffer["primal"], agent_pol_residual_data["primal"], copy(env.iteration)-1, env.params.n_history, env.params.alpha_update_freq)
-    env.residual_history_buffer["dual"], dual_state = update_residual_history(env.residual_history_buffer["dual"], agent_pol_residual_data["dual"], copy(env.iteration)-1, env.params.n_history, env.params.alpha_update_freq)
-    env.state = vcat(primal_state,dual_state)
+    env.residual_history_buffer["primal"], primal_state = update_residual_history(env.residual_history_buffer["primal"], agent_pol_residual_data["primal"], copy(env.iteration)-1, env.params.n_history, env.params.tau_update_freq)
+    env.residual_history_buffer["dual"], dual_state = update_residual_history(env.residual_history_buffer["dual"], agent_pol_residual_data["dual"], copy(env.iteration)-1, env.params.n_history, env.params.tau_update_freq)
+    env.state = vcat(sigmoid_norm_primal(primal_state),sigmoid_norm_dual(dual_state))
     nothing
 end
 
 function test_baseline()
-    data_area = initialize_dopf(env.data, env.params.model_type, adaptive_admm_methods, env.params.max_iteration, env.params.tol, env.params.initial_alpha)
-    data_area = run_to_end(data_area, env.params.baselines)
+    data_area = initialize_dopf(env.data, env.params.model_type, adaptive_admm_methods, env.params.max_iteration, env.params.tol, env.params.du_tol, env.params.baseline_alpha_pq, env.params.baseline_alpha_vt)
+    data_area = run_to_end(data_area, env.params.baseline_tau_inc, env.params.baseline_tau_dec)
     return data_area 
 end
 
 function test_policy(Q)
-    data_area = initialize_dopf(env.data, env.params.model_type, adaptive_admm_methods, env.params.max_iteration, env.params.tol, env.params.initial_alpha)
-    data_area = run_to_end(data_area, Q, env.action_set, env.params.baselines, env.params.n_history, env.params.alpha_update_freq)
-    return data_area 
+    data_area = initialize_dopf(env.data, env.params.model_type, adaptive_admm_methods, env.params.max_iteration, env.params.tol, env.params.du_tol, env.params.baseline_alpha_pq, env.params.baseline_alpha_vt)
+    data_area, state_trace = run_to_end(data_area, Q, env.tau_inc_action_set, env.tau_dec_action_set, env.params.n_history, env.params.tau_update_freq)
+    return data_area, state_trace 
 end
