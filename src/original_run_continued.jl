@@ -24,51 +24,7 @@ ns, na = length(state(env)), length(action_space(env))
 
 run_num = 1
 
-agent = Agent(
-    policy = QBasedPolicy(
-        learner = DQNLearner(
-            approximator = NeuralNetworkApproximator(
-                model = Chain(
-                    Dense(ns, 256, relu; init = glorot_uniform(rng)),
-                    Dense(256, 256, relu; init = glorot_uniform(rng)),
-                    Dense(256, 256, relu; init = glorot_uniform(rng)),
-                    Dense(256, na; init = glorot_uniform(rng)),
-                ),
-                optimizer = Adam(),
-            ),
-            target_approximator = NeuralNetworkApproximator(
-                model = Chain(
-                    Dense(ns, 256, relu; init = glorot_uniform(rng)),
-                    Dense(256, 256, relu; init = glorot_uniform(rng)),
-                    Dense(256, 256, relu; init = glorot_uniform(rng)),
-                    Dense(256, na; init = glorot_uniform(rng)),
-                ),
-                optimizer = Adam(),
-            ),
-            loss_func = mse,
-            stack_size = nothing,
-            batch_size = 200,
-            update_horizon = 1,
-            min_replay_history = 450,
-            update_freq = 2,
-            target_update_freq = 50,
-            rng = rng,
-        ),
-        explorer = EpsilonGreedyExplorer(
-            kind = :exp,
-            ϵ_init = 1,
-            ϵ_stable = 0.2,
-            decay_steps = 10000,
-            rng = rng,
-        ),
-    ),
-    trajectory = CircularArraySARTTrajectory(
-        capacity = 50000,
-        state = Vector{Float32} => (ns,),
-    ),
-)
-agent.policy.learner.sampler.γ = 0.97 #vary between (0.8,0.99)
-
+agent = BSON.load("data/saved_agents/agent_$run_num.bson")["agent"]
 
 hook = ComposedHook(TotalRewardPerEpisode())
 run(agent, env, StopAfterStep(10000), hook)
