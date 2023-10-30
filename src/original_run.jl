@@ -16,10 +16,10 @@ rng = StableRNG(123)
 
 case_path = "data/case118_3.m"
 data = parse_file(case_path)
-pq_alpha_values = 200:200:800
-vt_alpha_values = 2800:400:4800
+pq_alpha_values = [200, 350, 400, 450, 600, 800]
+vt_alpha_values = [2800, 3200, 3600, 3800, 4000, 4200, 4600]
 
-env = ADMMEnv(data, pq_alpha_values, vt_alpha_values, rng, baseline_alpha_pq = 400, baseline_alpha_vt = 4000, alpha_update_freq = 5)
+env = ADMMEnv(data, pq_alpha_values, vt_alpha_values, rng, baseline_alpha_pq = 400, baseline_alpha_vt = 4000, alpha_update_freq = 10)
 ns, na = length(state(env)), length(action_space(env))
 
 run_num = 1

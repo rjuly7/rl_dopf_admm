@@ -16,10 +16,10 @@ rng = StableRNG(123)
 
 case_path = "data/case118_3.m"
 data = parse_file(case_path)
-tau_inc_values = [0.001, 0.003, 0.005, 0.007]
-tau_dec_values = [0.001, 0.003, 0.005, 0.007]
+tau_inc_values = [0.001, 0.003, 0.004, 0.005, 0.007]
+tau_dec_values = [0.001, 0.003, 0.004, 0.005, 0.006, 0.007]
 
-env = AdaptiveADMMEnv(data, tau_inc_values, tau_dec_values, rng, baseline_alpha_pq = 400, baseline_alpha_vt = 4000, tau_update_freq = 5)
+env = AdaptiveADMMEnv(data, tau_inc_values, tau_dec_values, rng, baseline_alpha_pq = 400, baseline_alpha_vt = 4000, tau_update_freq = 10)
 ns, na = length(state(env)), length(action_space(env))
 
 run_num = 1
