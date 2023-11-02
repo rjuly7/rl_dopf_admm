@@ -51,7 +51,7 @@ agent = Agent(
             update_horizon = 1,
             min_replay_history = 450,
             update_freq = 2,
-            target_update_freq = 50,
+            target_update_freq = 250,
             rng = rng,
         ),
         explorer = EpsilonGreedyExplorer(
@@ -71,7 +71,7 @@ agent.policy.learner.sampler.γ = 0.97 #vary between (0.8,0.99)
 
 
 hook = ComposedHook(TotalRewardPerEpisode())
-run(agent, env, StopAfterStep(10000), hook)
+run(agent, env, StopAfterStep(260), hook)
 
 using Plots
 plot(hook[1].rewards, xlabel="Episode", ylabel="Reward", label="")
@@ -98,4 +98,4 @@ policy_iterations = polt_data_area[1]["counter"]["iteration"]
 println("Baseline: ", baseline_iterations, "  policy with target: ", policyt_iterations, "  policy not target: ", policy_iterations)
 
 bson("data/saved_agents/agent_$run_num.bson", Dict("agent" => agent))
-bson("data/saved_agents/trained_Qs/trial_$run_num.bson", Dict("Q" => Q, "Qt" => Qt))
+bson("data/trained_Qs/trial_$run_num.bson", Dict("Q" => Q, "Qt" => Qt))

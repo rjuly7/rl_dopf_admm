@@ -54,4 +54,4 @@ policy_iterations = polt_data_area[1]["counter"]["iteration"]
 println("Baseline: ", baseline_iterations, "  policy with target: ", policyt_iterations, "  policy not target: ", policy_iterations)
 
 bson("data/saved_agents/agent_$run_num.bson", Dict("agent" => agent))
-bson("data/saved_agents/trained_Qs/trial_$run_num.bson", Dict("Q" => Q, "Qt" => Qt))
+bson("data/trained_Qs/trial_$run_num.bson", Dict("Q" => Q, "Qt" => Qt))
