@@ -71,7 +71,7 @@ agent = Agent(
 
 agent.policy.learner.sampler.γ = 0.97 #vary between (0.8,0.99)
 hook = ComposedHook(TotalRewardPerEpisode())
-run(agent, env, StopAfterStep(30), hook)
+run(agent, env, StopAfterStep(5000), hook)
 
 using Plots
 plot(hook[1].rewards, xlabel="Episode", ylabel="Reward", label="")

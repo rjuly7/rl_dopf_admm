@@ -257,9 +257,9 @@ function run_to_end(data_area::Dict{Int,Any}, Q, tau_inc_action_set, tau_dec_act
                 data = data_area[area] 
                 alpha_pq, alpha_vt = change_alpha(data, string(area), tau_inc, tau_dec)
                 assign_alpha!(data_area[area], alpha_pq, alpha_vt)
-                println("a: ", a)
-                println("pq: ", alphas[area]["pq"])
-                println("vt: ", alphas[area]["vt"])
+                println("a: ", a, " tau_inc: ", tau_inc, " tau_dec: ", tau_dec)
+                println("pq: ", alpha_pq)
+                println("vt: ", alpha_vt)
             end
         end
 

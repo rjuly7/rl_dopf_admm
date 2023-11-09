@@ -19,6 +19,9 @@ data = parse_file(case_path)
 pq_alpha_values = [200, 350, 400, 450, 600, 800]
 vt_alpha_values = [2800, 3200, 3600, 3800, 4000, 4200, 4600]
 
+pq_alpha_values = 200:200:800
+vt_alpha_values = 2800:400:4800
+
 env = ADMMEnv(data, pq_alpha_values, vt_alpha_values, rng, baseline_alpha_pq = 400, baseline_alpha_vt = 4000, alpha_update_freq = 5)
 ns, na = length(state(env)), length(action_space(env))
 
@@ -51,14 +54,14 @@ agent = Agent(
             update_horizon = 1,
             min_replay_history = 450,
             update_freq = 2,
-            target_update_freq = 250,
+            target_update_freq = 50,
             rng = rng,
         ),
         explorer = EpsilonGreedyExplorer(
             kind = :exp,
             ϵ_init = 1,
-            ϵ_stable = 0.2,
-            decay_steps = 10000,
+            ϵ_stable = 0.5,
+            decay_steps = 9000,
             rng = rng,
         ),
     ),
@@ -71,7 +74,7 @@ agent.policy.learner.sampler.γ = 0.97 #vary between (0.8,0.99)
 
 
 hook = ComposedHook(TotalRewardPerEpisode())
-run(agent, env, StopAfterStep(260), hook)
+run(agent, env, StopAfterStep(10000), hook)
 
 using Plots
 plot(hook[1].rewards, xlabel="Episode", ylabel="Reward", label="")
