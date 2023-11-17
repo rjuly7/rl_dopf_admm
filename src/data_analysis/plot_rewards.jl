@@ -20,7 +20,7 @@ data = parse_file(case_path)
 rng = StableRNG(123)
 
 run_num = 7
-sub_num = 30000
+sub_num = 24000
 
 if run_num == 5 || run_num == 6
     pq_alpha_values = 200:100:800
@@ -36,8 +36,8 @@ ns, na = length(state(env)), length(action_space(env))
 agent = BSON.load("data/saved_agents/agent_$run_num"*"_$sub_num.bson")["agent"]
 
 #Compare to baseline 
-base_data_area = test_baseline()
-baseline_iterations = base_data_area[1]["counter"]["iteration"]
+#base_data_area = test_baseline()
+#baseline_iterations = base_data_area[1]["counter"]["iteration"]
 Qt = agent.policy.learner.target_approximator
 polt_data_area, statet_trace = test_policy(Qt)
 
@@ -46,6 +46,3 @@ pol_data_area, state_trace = test_policy(Q)
 policyt_iterations = polt_data_area[1]["counter"]["iteration"]
 policy_iterations = pol_data_area[1]["counter"]["iteration"]
 println("Baseline: ", baseline_iterations, "  policy with target: ", policyt_iterations, "  policy not target: ", policy_iterations)
-
-bson("data/saved_agents/agent_$run_num.bson", Dict("agent" => agent))
-bson("data/trained_Qs/trial_$run_num.bson", Dict("Q" => Q, "Qt" => Qt))

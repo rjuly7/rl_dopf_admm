@@ -133,6 +133,9 @@ function run_to_end(data_area::Dict{Int,Any}, alpha_pq, alpha_vt;
             end
         end
 
+        println(data_area[1]["alpha"]["2"]["qf"]["109"])
+        println(data_area[1]["alpha"]["2"]["va"]["24"])
+
         # share solution with neighbors, the shared data is first obtained to facilitate distributed implementation
         for area in areas_id # sender subsystem
             for neighbor in data_area[area]["neighbors"] # receiver subsystem
@@ -205,6 +208,9 @@ function run_to_end(data_area::Dict{Int,Any}, Q, pq_action_set, vt_action_set, a
                 update_data!(data_area[area], result["solution"])
             end
         end
+
+        println(data_area[1]["alpha"]["2"]["qf"]["109"])
+        println(data_area[1]["alpha"]["2"]["va"]["24"])
 
         # share solution with neighbors, the shared data is first obtained to facilitate distributed implementation
         for area in areas_id # sender subsystem
