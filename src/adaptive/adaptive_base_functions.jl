@@ -181,7 +181,10 @@ function run_to_end(data_area::Dict{Int,Any}, tau_inc, tau_dec;
         for area in areas_id 
             data = data_area[area] 
             alpha_pq, alpha_vt = change_alpha(data, string(area), tau_inc, tau_dec)
-            assign_alpha!(data_area[area], alpha_pq, alpha_vt)
+            if mod(iteration, 5) == 0
+                println(area, " ", alpha_pq, " ", alpha_vt)
+                assign_alpha!(data_area[area], alpha_pq, alpha_vt)
+            end
         end        
 
         push!(reward_residual_data["dual"], sqrt(sum(data_area[area]["dual_residual"][string(area)]^2 for area in areas_id)))

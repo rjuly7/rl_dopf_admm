@@ -183,7 +183,6 @@ function run_to_end(data_area::Dict{Int,Any}, Q, pq_action_set, vt_action_set, a
                 state = vcat(sigmoid_norm_primal(agent_residual_data[area]["primal"][end-n_history+1:end]),sigmoid_norm_dual(agent_residual_data[area]["dual"][end-n_history+1:end]))
                 push!(state_trace[area],deepcopy(state))
                 a = argmax(Q(state))
-                println(Q(state))
                 n_actions_vt = length(vt_action_set)
                 pq_idx = Int(ceil(a/n_actions_vt))
                 vt_idx = a - (pq_idx-1)*n_actions_vt 

@@ -19,13 +19,13 @@ data = parse_file(case_path)
 pq_alpha_values = [200, 350, 400, 450, 600, 800]
 vt_alpha_values = [2800, 3200, 3600, 3800, 4000, 4200, 4600]
 
-pq_alpha_values = 200:200:800
-vt_alpha_values = 2800:400:4800
+pq_alpha_values = 200:100:800
+vt_alpha_values = 2800:200:4800
 
 env = ADMMEnv(data, pq_alpha_values, vt_alpha_values, rng, baseline_alpha_pq = 400, baseline_alpha_vt = 4000, alpha_update_freq = 5)
 ns, na = length(state(env)), length(action_space(env))
 
-run_num = 1
+run_num = 4
 
 agent = Agent(
     policy = QBasedPolicy(
@@ -60,8 +60,8 @@ agent = Agent(
         explorer = EpsilonGreedyExplorer(
             kind = :exp,
             ϵ_init = 1,
-            ϵ_stable = 0.5,
-            decay_steps = 9000,
+            ϵ_stable = 0.05,
+            decay_steps = 18000,
             rng = rng,
         ),
     ),
@@ -74,7 +74,7 @@ agent.policy.learner.sampler.γ = 0.97 #vary between (0.8,0.99)
 
 
 hook = ComposedHook(TotalRewardPerEpisode())
-run(agent, env, StopAfterStep(10000), hook)
+run(agent, env, StopAfterStep(18000), hook)
 
 using Plots
 plot(hook[1].rewards, xlabel="Episode", ylabel="Reward", label="")
@@ -96,8 +96,8 @@ polt_data_area, statet_trace = test_policy(Qt)
 
 Q = agent.policy.learner.approximator 
 pol_data_area, state_trace = test_policy(Q)
-policyt_iterations = pol_data_area[1]["counter"]["iteration"]
-policy_iterations = polt_data_area[1]["counter"]["iteration"]
+policyt_iterations = polt_data_area[1]["counter"]["iteration"]
+policy_iterations = pol_data_area[1]["counter"]["iteration"]
 println("Baseline: ", baseline_iterations, "  policy with target: ", policyt_iterations, "  policy not target: ", policy_iterations)
 
 bson("data/saved_agents/agent_$run_num.bson", Dict("agent" => agent))
