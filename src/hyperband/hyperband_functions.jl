@@ -46,7 +46,7 @@ function get_hyperparameter_configuration(n,data_area,pq_bounds,vt_bounds)
     return alpha_configs 
 end
 
-#n i.i.d samples from some distribution defined over the hyperparameter configuration space 
+#setting intial alpha values 
 function set_hyperparameter_configuration(data_area,alpha_pq,alpha_vt)
     alpha_config = Dict(area_id => deepcopy(data_area[area_id]["alpha"]) for area_id in keys(data_area))
     for area_id in keys(data_area)
@@ -66,12 +66,25 @@ function set_hyperparameter_configuration(data_area,alpha_pq,alpha_vt)
     return alpha_config
 end
 
+function perturb_loads(data_area)
+    for area in keys(data_area)
+        for (i,load) in data_area[area]["load"]
+            r = rand() - 0.5
+            data_area[area]["load"][i]["pd"] = load["pd"] + load["pd"] * r
+            data_area[area]["load"][i]["qd"] = load["qd"] + load["qd"] * r
+        end
+    end
+    return data_area 
+end
+
 function run_then_return_val_loss(data_area,alpha_config,initial_config,optimizer)
     flag_convergence = false
     #We want to store the 2-norm of primal and dual residuals
     #at each iteration
     areas_id = get_areas_id(data_area)
     iteration = 1 
+
+    data_area = perturb_loads(data_area)
 
     while iteration < max_iteration && !flag_convergence
         # overwrite any changes the adaptive algorithm made to alphas in last iteration 
@@ -142,15 +155,19 @@ function get_run_count(eta,R)
     for s = smax:-1:0
         n = Int(ceil(B/R*eta^s/(s+1)))
         r = R/(eta^s)
+        println("s: ", s, "  n: ", n, "  r: ", r)
         for i = 0:s
             n_i = Int(floor(n/(eta^i)))
             r_i = r*eta^i 
+            println("s: ", s, "  n: ", n, " i: ", i, " n_i: ", n_i, " r_i: ", r_i)
             for iii = 1:n
                 for rr=1:r_i 
                     run_count += 1
                 end
             end
+            println(run_count)
         end
+        println("Total for s: ",run_count)
     end 
     return run_count 
 end 
