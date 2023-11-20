@@ -179,6 +179,7 @@ function run_to_end(data_area::Dict{Int,Any}, Q, pq_action_set, vt_action_set, a
     iteration = 1 
     reward_residual_data = Dict("primal" => [], "dual" => []) 
     state_trace = Dict(i => [] for i in areas_id)
+    alpha_trace = Dict(i => [] for i in areas_id)
     while iteration < max_iteration && !flag_convergence
 
         if mod(iteration-n_history-1,update_alpha_freq) == 0 && iteration >= n_history 
@@ -191,6 +192,7 @@ function run_to_end(data_area::Dict{Int,Any}, Q, pq_action_set, vt_action_set, a
                 vt_idx = a - (pq_idx-1)*n_actions_vt 
                 alphas[area]["pq"] = pq_action_set[pq_idx]
                 alphas[area]["vt"] = vt_action_set[vt_idx]
+                push!(alpha_trace[area], Dict("pq" => alphas[area]["pq"], "vt" => alphas[area]["vt"]))
                 println("a: ", a)
                 println("pq: ", alphas[area]["pq"])
                 println("vt: ", alphas[area]["vt"])
@@ -246,7 +248,7 @@ function run_to_end(data_area::Dict{Int,Any}, Q, pq_action_set, vt_action_set, a
         iteration += 1
     end
 
-    return data_area, state_trace 
+    return data_area, state_trace, alpha_trace 
 end
 
 function quick_adaptive_test(data;
