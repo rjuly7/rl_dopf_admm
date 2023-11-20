@@ -92,10 +92,10 @@ open("data/rewards/trial_$run_num.json", "w") do f
 base_data_area = test_baseline()
 baseline_iterations = base_data_area[1]["counter"]["iteration"]
 Qt = agent.policy.learner.target_approximator
-polt_data_area, statet_trace = test_policy(Qt)
+polt_data_area, statet_trace, alphat_trace = test_policy(Qt)
 
 Q = agent.policy.learner.approximator 
-pol_data_area, state_trace = test_policy(Q)
+pol_data_area, state_trace, alpha_trace = test_policy(Q)
 policyt_iterations = polt_data_area[1]["counter"]["iteration"]
 policy_iterations = pol_data_area[1]["counter"]["iteration"]
 println("Baseline: ", baseline_iterations, "  policy with target: ", policyt_iterations, "  policy not target: ", policy_iterations)

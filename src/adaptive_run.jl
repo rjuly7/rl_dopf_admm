@@ -16,8 +16,8 @@ rng = StableRNG(123)
 
 case_path = "data/case118_3.m"
 data = parse_file(case_path)
-tau_inc_values = [0.001, 0.003, 0.004, 0.005, 0.007]
-tau_dec_values = [0.001, 0.003, 0.004, 0.005, 0.006, 0.007]
+tau_inc_values = [0, 0.0005, 0.001, 0.005, 0.008, 0.01, 0.02, 0.03, 0.04, 0.05, 0.1, 0.2, 0.5, 0.7, 1]  
+tau_dec_values = [0, 0.0005, 0.001, 0.005, 0.008, 0.01, 0.02, 0.03, 0.04, 0.05, 0.1, 0.2, 0.5, 0.7, 1] 
 
 env = AdaptiveADMMEnv(data, tau_inc_values, tau_dec_values, rng, baseline_alpha_pq = 400, baseline_alpha_vt = 4000, tau_update_freq = 10)
 ns, na = length(state(env)), length(action_space(env))
@@ -47,7 +47,7 @@ agent = Agent(
             ),
             loss_func = mse,
             stack_size = nothing,
-            batch_size = 200,
+            batch_size = 300,
             update_horizon = 1,
             min_replay_history = 450,
             update_freq = 2,
@@ -57,8 +57,8 @@ agent = Agent(
         explorer = EpsilonGreedyExplorer(
             kind = :exp,
             ϵ_init = 1,
-            ϵ_stable = 0.2,
-            decay_steps = 10000,
+            ϵ_stable = 0.05,
+            decay_steps = 9500,
             rng = rng,
         ),
     ),
@@ -69,9 +69,9 @@ agent = Agent(
 )
 
 
-agent.policy.learner.sampler.γ = 0.97 #vary between (0.8,0.99)
+agent.policy.learner.sampler.γ = 0.97 
 hook = ComposedHook(TotalRewardPerEpisode())
-run(agent, env, StopAfterStep(5000), hook)
+run(agent, env, StopAfterStep(10000), hook)
 
 using Plots
 plot(hook[1].rewards, xlabel="Episode", ylabel="Reward", label="")

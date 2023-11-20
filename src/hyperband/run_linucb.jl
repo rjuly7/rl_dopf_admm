@@ -1,16 +1,19 @@
 using LinearAlgebra
 using JuMP 
+using Gurobi 
 
-function LinUCB(V,action,reward,y,beta,nv,pq_bounds,vt_bounds):
+function LinUCB(V,action,reward,y,beta,nv,lower_bounds,upper_bounds):
     a = reshape(action, length(action), 1)
     V = V + a*transpose(a)
     y = y + reward*a 
     inv_V = np.linalg.inv(V)
     hat_theta = inv_V * y
 
-    model = Model(optimizer)
-    @variable(model, a[1:nv])
-    @NLobjective(model, dot(hat_theta,a) + sqrt(beta)*sqrt(transpose(a)*mm*a))
+    model = Model(Gurobi.Optimizer)
+    @variable(model, lower_bounds[i] <= a[i=1:nv] <= upper_bounds[i])
+    @variable(model, y)
+    @objective(model, Max, dot(hat_theta,a) + sqrt(beta)*y)
+    @constraint(model, transpose(a)*inv_V*a = y^2)
 
     return np.argmax(ucb),V,y
 
