@@ -135,7 +135,7 @@ function run_then_return_val_loss(data_area,alpha_config,initial_config,optimize
         iteration += 1
     end
 
-    return iteration 
+    return -1*iteration 
 end
 
 function maxk(a, k)

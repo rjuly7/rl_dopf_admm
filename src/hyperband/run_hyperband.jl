@@ -7,6 +7,7 @@ using StatsBase
 include("hyperband_functions.jl")
 
 function run_hyperband_perturb_loads(R,eta,data_area,pq_bounds,vt_bounds,initial_config,optimizer)
+    all_configs = []
     smax = Int(floor(log(eta,R)))
     B = (smax + 1)*R 
     alpha_configs = []
@@ -24,6 +25,7 @@ function run_hyperband_perturb_loads(R,eta,data_area,pq_bounds,vt_bounds,initial
             loss = []
             count = 1 
             for alpha in alpha_configs 
+                push!(all_configs,alpha)
                 track_alpha_loss = []
                 for rr=1:r_i 
                     println("Count: ", count, "  rr: ", rr)
@@ -37,8 +39,10 @@ function run_hyperband_perturb_loads(R,eta,data_area,pq_bounds,vt_bounds,initial
         end
         push!(best_configs, (alpha_configs,top_idcs_vals))
     end 
-    return best_configs 
+    return best_configs, all_configs 
 end
+
+run_num = 1
 
 case_path = "data/case118_3.m"
 data = parse_file(case_path)
@@ -60,6 +64,6 @@ initial_config = set_hyperparameter_configuration(data_area,alpha_pq,alpha_vt)
 
 R = 50
 eta = 3 
-best_configs = run_hyperband_perturb_loads(R,eta,data_area,pq_bounds,vt_bounds,initial_config,optimizer)
-bson("data/hyperband/perturb_$run_num.jl", Dict("best_configs" => best_configs))
+best_configs,all_configs = run_hyperband_perturb_loads(R,eta,data_area,pq_bounds,vt_bounds,initial_config,optimizer)
+bson("data/hyperband/perturb_$run_num.jl", Dict("best_configs" => best_configs, "all_configs" => all_configs))
 
