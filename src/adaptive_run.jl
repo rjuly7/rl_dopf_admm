@@ -16,13 +16,14 @@ rng = StableRNG(123)
 
 case_path = "data/case118_3.m"
 data = parse_file(case_path)
-tau_inc_values = [0, 0.0005, 0.001, 0.005, 0.008, 0.01, 0.02, 0.03, 0.04, 0.05, 0.1, 0.2, 0.5, 0.7, 1]  
-tau_dec_values = [0, 0.0005, 0.001, 0.005, 0.008, 0.01, 0.02, 0.03, 0.04, 0.05, 0.1, 0.2, 0.5, 0.7, 1] 
+tau_inc_values = [0, 0.0005, 0.0007, 0.001, 0.003, 0.005, 0.008, 0.01, 0.015, 0.02, 0.03, 0.04, 0.05, 0.06, 0.1]  
+tau_dec_values = [0, 0.0005, 0.0007, 0.001, 0.003, 0.005, 0.008, 0.01, 0.015, 0.02, 0.03, 0.04, 0.05, 0.06, 0.1] 
+
+run_num = 1
+sub_num = 12000
 
 env = AdaptiveADMMEnv(data, tau_inc_values, tau_dec_values, rng, baseline_alpha_pq = 400, baseline_alpha_vt = 4000, tau_update_freq = 10)
 ns, na = length(state(env)), length(action_space(env))
-
-run_num = 1
 
 agent = Agent(
     policy = QBasedPolicy(
@@ -58,7 +59,7 @@ agent = Agent(
             kind = :exp,
             ϵ_init = 1,
             ϵ_stable = 0.05,
-            decay_steps = 9500,
+            decay_steps = 11000,
             rng = rng,
         ),
     ),
@@ -71,7 +72,7 @@ agent = Agent(
 
 agent.policy.learner.sampler.γ = 0.97 
 hook = ComposedHook(TotalRewardPerEpisode())
-run(agent, env, StopAfterStep(10000), hook)
+run(agent, env, StopAfterStep(sub_num), hook)
 
 using Plots
 plot(hook[1].rewards, xlabel="Episode", ylabel="Reward", label="")
@@ -93,9 +94,9 @@ polt_data_area, statet_trace = test_policy(Qt)
 
 Q = agent.policy.learner.approximator 
 pol_data_area, state_trace = test_policy(Q)
-policyt_iterations = pol_data_area[1]["counter"]["iteration"]
-policy_iterations = polt_data_area[1]["counter"]["iteration"]
+policyt_iterations = polt_data_area[1]["counter"]["iteration"]
+policy_iterations = pol_data_area[1]["counter"]["iteration"]
 println("Baseline: ", baseline_iterations, "  policy with target: ", policyt_iterations, "  policy not target: ", policy_iterations)
 
-bson("data/saved_agents/adaptive_agent_$run_num.bson", Dict("agent" => agent))
-bson("data/trained_Qs/adaptive_trial_$run_num.bson", Dict("Q" => Q, "Qt" => Qt))
+bson("data/saved_agents/adaptive_agent_$run_num"*"_$sub_num.bson", Dict("agent" => agent))
+bson("data/trained_Qs/adaptive_trial_$run_num"*"_$sub_num.bson", Dict("Q" => Q, "Qt" => Qt))

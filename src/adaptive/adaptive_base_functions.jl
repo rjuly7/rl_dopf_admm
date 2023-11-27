@@ -25,6 +25,7 @@ function change_alpha(data, self_key, tau_inc, tau_dec)
     k1 = first(keys(data["alpha"]))
     alpha_pq = data["alpha"][k1]["pf"][first(keys(data["alpha"][k1]["pf"]))]
     alpha_vt = data["alpha"][k1]["vm"][first(keys(data["alpha"][k1]["vm"]))]
+    println(data["mismatch"][self_key], "  ", data["dual_residual"][self_key])
     if data["mismatch"][self_key] > mu_inc * data["dual_residual"][self_key]
         alpha_pq = alpha_pq * ( 1 + tau_inc)
         alpha_vt = alpha_vt * (1 + tau_inc)
@@ -64,6 +65,13 @@ function initialize_dopf(data, model_type, dopf_method, max_iteration, tol, du_t
         assign_alpha!(data_area[area],baseline_alpha_pq,baseline_alpha_vt)
     end
 
+    for area in areas_id 
+        data_area[area]["parameter"]["alpha_max"] = 1e6
+        data_area[area]["parameter"]["alpha_min"] = 10
+        data_area[area]["parameter"]["mu_inc"] = 0.02
+        data_area[area]["parameter"]["mu_dec"] = 200
+    end
+
     return data_area 
 end
 
@@ -93,7 +101,7 @@ function run_some_iterations(data_area::Dict{Int,Any}, dopf_method::Module, mode
                 receive_shared_data!(data_area[neighbor], deepcopy(shared_data), area)
             end
         end
-    
+
         alpha_copy = Dict(area => deepcopy(data_area[area]["alpha"]) for area in areas_id)
         # calculate mismatches and update convergence flags
         Threads.@threads for area in areas_id
@@ -102,6 +110,13 @@ function run_some_iterations(data_area::Dict{Int,Any}, dopf_method::Module, mode
         end
         for area in areas_id 
             data_area[area]["alpha"] = alpha_copy[area]
+        end
+
+        if mod(iteration,8) == 0
+            k1 = first(keys(data_area[1]["alpha"]))
+            alpha_pq = data_area[1]["alpha"][k1]["pf"][first(keys(data_area[1]["alpha"][k1]["pf"]))]
+            alpha_vt = data_area[1]["alpha"][k1]["vm"][first(keys(data_area[1]["alpha"][k1]["vm"]))]
+            println("CHECKING pq: ", alpha_pq, "  vt: ", alpha_vt)
         end
 
         # solve local problem and update solution
@@ -128,7 +143,7 @@ function run_some_iterations(data_area::Dict{Int,Any}, dopf_method::Module, mode
                 first_time = false 
             end
         end
-        if mod(iteration,5) == 0 
+        if mod(iteration,10) == 0 
             print_iteration(data_area, print_level, [info])
             println("pri: ", reward_residual_data["primal"][end], "  du: ", reward_residual_data["dual"][end])
             println()
@@ -181,10 +196,10 @@ function run_to_end(data_area::Dict{Int,Any}, tau_inc, tau_dec;
         for area in areas_id 
             data = data_area[area] 
             alpha_pq, alpha_vt = change_alpha(data, string(area), tau_inc, tau_dec)
-            if mod(iteration, 5) == 0
+            if mod(iteration, 1) == 0
                 println(area, " ", alpha_pq, " ", alpha_vt)
-                assign_alpha!(data_area[area], alpha_pq, alpha_vt)
             end
+            assign_alpha!(data_area[area], alpha_pq, alpha_vt)
         end        
 
         push!(reward_residual_data["dual"], sqrt(sum(data_area[area]["dual_residual"][string(area)]^2 for area in areas_id)))
@@ -218,6 +233,8 @@ function run_to_end(data_area::Dict{Int,Any}, Q, tau_inc_action_set, tau_dec_act
     iteration = 1 
     reward_residual_data = Dict("primal" => [], "dual" => []) 
     state_trace = Dict(i => [] for i in areas_id)
+    tau_inc = 0
+    tau_dec = 0 
     while iteration < max_iteration && !flag_convergence
 
         # solve local problem and update solution
@@ -246,7 +263,7 @@ function run_to_end(data_area::Dict{Int,Any}, Q, tau_inc_action_set, tau_dec_act
             data_area[area]["alpha"] = alpha_copy[area]
         end
 
-        if mod(iteration-n_history-1,update_alpha_freq) == 0 && iteration >= n_history 
+        if mod(iteration-n_history-1,update_alpha_freq) == 0 && iteration > n_history 
             for area in areas_id 
                 state = vcat(sigmoid_norm_primal(agent_residual_data[area]["primal"][end-n_history+1:end]),sigmoid_norm_dual(agent_residual_data[area]["dual"][end-n_history+1:end]))
                 push!(state_trace[area],deepcopy(state))
@@ -257,12 +274,19 @@ function run_to_end(data_area::Dict{Int,Any}, Q, tau_inc_action_set, tau_dec_act
                 tau_dec_idx = a - (tau_inc_idx-1)*n_actions_tau_dec 
                 tau_inc = tau_inc_action_set[tau_inc_idx]
                 tau_dec = tau_dec_action_set[tau_dec_idx]
+                println("a: ", a, " tau_inc: ", tau_inc, " tau_dec: ", tau_dec)
+            end
+        end
+
+        if iteration > n_history 
+            for area in areas_id 
                 data = data_area[area] 
                 alpha_pq, alpha_vt = change_alpha(data, string(area), tau_inc, tau_dec)
                 assign_alpha!(data_area[area], alpha_pq, alpha_vt)
-                println("a: ", a, " tau_inc: ", tau_inc, " tau_dec: ", tau_dec)
-                println("pq: ", alpha_pq)
-                println("vt: ", alpha_vt)
+                if area == 1
+                    println("pq: ", alpha_pq)
+                    println("vt: ", alpha_vt)
+                end
             end
         end
 

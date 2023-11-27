@@ -6,6 +6,7 @@ using PowerModelsADA
 using JuMP 
 using Gurobi 
 using Ipopt 
+using BSON 
 include("linucb_functions.jl")
 
 run_num = 1
@@ -29,7 +30,6 @@ alpha_vt = 4000
 initial_config = set_hyperparameter_configuration(data_area,alpha_pq,alpha_vt)
 lambda = 0.5
 
-T = 500
+T = 200
 reward,alpha_config,trace_params = run_linucb_discrete(T,data_area,pqs,vts,initial_config,optimizer,lambda)
 bson("data/hyperband/linucb_discrete_$run_num.jl", Dict("alpha_config" => alpha_config, "reward" => reward, "trace" => trace_params))
-

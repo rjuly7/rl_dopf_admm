@@ -82,7 +82,7 @@ function run_then_return_val_loss(data_area,alpha_config,initial_config,optimize
         iteration += 1
     end
 
-    return -1*iteration 
+    return 200 - iteration 
 end
 
 function vector_to_config(alpha_vector,data_area)
@@ -194,7 +194,7 @@ function initialize_dopf(data, model_type, dopf_method, max_iteration, tol, du_t
 end
 
 function LinUCB(V,action,reward,y,beta,nv,lower_bounds,upper_bounds)
-    reward = reward/1000 
+    reward = reward/50 
     a = reshape(action, length(action), 1)
     V = V + a*transpose(a)
     y = y + reward*a 
@@ -237,7 +237,7 @@ function run_linucb(T,data_area,pq_bounds,vt_bounds,initial_config,optimizer,lam
 end
 
 function LinUCB_discrete(V,a_idx,reward,y,beta,nv)
-    reward = reward/100 
+    reward = reward/50
     a = zeros(nv,1)
     a[a_idx] = 1
     V = V + a*transpose(a)
@@ -253,7 +253,7 @@ function LinUCB_discrete(V,a_idx,reward,y,beta,nv)
     end
 
     best_val,best_idx = findmax(val_list)
-    println("Best val: ", best_val, "  best arm: ", a_idx)
+    println("Best val: ", best_val, "  best arm: ", best_idx)
 
     return best_idx,V,y 
 end

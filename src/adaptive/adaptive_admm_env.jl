@@ -155,7 +155,9 @@ function _step!(env::AdaptiveADMMEnv, a)
     tau_dec = env.tau_dec_action_set[tau_dec_idx]
     save_data_area = deepcopy(env.data_area)
     save_iteration = deepcopy(env.iteration)
+    println("Running base:")
     base_residual_data, agent_base_residual_data, base_data_area, base_iteration, base_converged, base_conv_iter = run_some_iterations(deepcopy(env.data_area), adaptive_admm_methods, env.params.model_type, env.params.optimizer, copy(env.iteration), env.params.baseline_tau_inc, env.params.baseline_tau_dec, env.params.tau_update_freq, rng)
+    println("Running pol:")
     pol_residual_data, agent_pol_residual_data, pol_data_area, pol_iteration, pol_converged, pol_conv_iter = run_some_iterations(deepcopy(env.data_area), adaptive_admm_methods, env.params.model_type, env.params.optimizer, copy(env.iteration), tau_inc, tau_dec, env.params.tau_update_freq, rng)
     #Compute reward 
     Rb = (base_residual_data["primal"][end] - pol_residual_data["primal"][end])/base_residual_data["primal"][end] + (base_residual_data["dual"][end] - pol_residual_data["dual"][end])/base_residual_data["dual"][end]
