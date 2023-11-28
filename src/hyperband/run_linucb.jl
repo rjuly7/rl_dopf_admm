@@ -9,6 +9,8 @@ using Ipopt
 using BSON 
 include("linucb_functions.jl")
 
+run_num = 1 
+
 case_path = "data/case118_3.m"
 data = parse_file(case_path)
 model_type = ACPPowerModel
@@ -26,7 +28,7 @@ vt_bounds = [3000,5000]
 alpha_pq = 400
 alpha_vt = 4000 
 initial_config = set_hyperparameter_configuration(data_area,alpha_pq,alpha_vt)
-lambda = 0.5
+lambda = 0.1
 
 T = 5
 reward,alpha_config,trace_params = run_linucb(T,data_area,pq_bounds,vt_bounds,initial_config,optimizer,lambda)

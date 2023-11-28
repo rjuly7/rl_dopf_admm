@@ -195,19 +195,21 @@ end
 
 function LinUCB(V,action,reward,y,beta,nv,lower_bounds,upper_bounds)
     reward = reward/50 
+    action = action/1000 
     a = reshape(action, length(action), 1)
     V = V + a*transpose(a)
     y = y + reward*a 
     inv_V = inv(V)
     hat_theta = inv_V * y
 
-    model = Model(Gurobi.Optimizer)
-    set_optimizer_attribute(model, "NonConvex", 2)
+    model = Model(Ipopt.Optimizer)
+    #set_optimizer_attribute(model, "NonConvex", 2)
     @variable(model, lower_bounds[i] <= a[i=1:nv] <= upper_bounds[i])
     @variable(model, u)
     @objective(model, Max, dot(hat_theta,a) + sqrt(beta)*u)
     @constraint(model, transpose(a)*inv_V*a == u^2)
     optimize!(model)
+    println(termination_status(model))
 
     return value.(a),V,y 
 end
