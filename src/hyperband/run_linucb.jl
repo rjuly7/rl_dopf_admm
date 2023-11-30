@@ -1,6 +1,7 @@
 using Pkg 
 Pkg.activate(".")
 
+using Distributed 
 using LinearAlgebra
 using PowerModelsADA 
 using JuMP 
@@ -30,7 +31,8 @@ alpha_vt = 4000
 initial_config = set_hyperparameter_configuration(data_area,alpha_pq,alpha_vt)
 lambda = 0.1
 
-T = 5
-reward,alpha_config,trace_params = run_linucb(T,data_area,pq_bounds,vt_bounds,initial_config,optimizer,lambda)
+T = 1
+initial_iters = 30
+reward,alpha_config,trace_params = run_linucb(T,data_area,pq_bounds,vt_bounds,initial_config,optimizer,lambda,initial_iters)
 bson("data/hyperband/linucb_$run_num.jl", Dict("alpha_config" => alpha_config, "reward" => reward, "trace" => trace_params))
 

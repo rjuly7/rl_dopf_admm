@@ -24,7 +24,9 @@ function get_hyperparameter_configuration(data_area,pq_bounds,vt_bounds)
     return alpha_config, alpha_vector 
 end
 
-function run_then_return_val_loss(data_area,alpha_config,initial_config,optimizer)
+function run_then_return_val_loss(data_area,alpha_config,initial_config,optimizer,initial_iters)
+    dopf_method = adaptive_admm_methods
+    model_type = ACPPowerModel
     flag_convergence = false
     #We want to store the 2-norm of primal and dual residuals
     #at each iteration
@@ -35,7 +37,7 @@ function run_then_return_val_loss(data_area,alpha_config,initial_config,optimize
 
     while iteration < max_iteration && !flag_convergence
         # overwrite any changes the adaptive algorithm made to alphas in last iteration 
-        if iteration >= 20
+        if iteration >= initial_iters 
             for area in areas_id 
                 data_area[area]["alpha"] = deepcopy(alpha_config[area])
             end
@@ -83,6 +85,144 @@ function run_then_return_val_loss(data_area,alpha_config,initial_config,optimize
     end
 
     return 200 - iteration 
+end
+
+function run_then_return_val_loss_mp(data_area::Dict{Int64, <:Any},alpha_config,initial_config,optimizer,initial_iters)
+    dopf_method = adaptive_admm_methods
+    model_type = ACPPowerModel
+    print_level = 1
+    # lookup dictionaries for worker-area pairs
+    areas_id = get_areas_id(data_area)
+    worker_id = Distributed.workers()
+    number_workers = length(worker_id)
+
+    k = 1
+    area_worker = Dict()
+    for i in areas_id
+        if k > number_workers
+            k = 1
+        end
+        area_worker[i] = worker_id[k]
+        k += 1 
+    end
+    worker_area = Dict([i => findall(x -> x==i, area_worker) for i in worker_id if i in values(area_worker)])
+
+    # initiate communication channels 
+    comms = Dict(0 => Dict(area => Distributed.RemoteChannel(1) for area in areas_id))
+    for area1 in areas_id
+        comms[area1] = Dict()
+        for area2 in [0; areas_id]
+            if area1 != area2 
+                comms[area1][area2] = Distributed.RemoteChannel(area_worker[area1])
+            end
+        end
+    end
+
+    # initilize distributed power model parameters
+    for area in areas_id
+        dopf_method.initialize_method(data_area[area], model_type; kwargs...)
+        put!(comms[0][area], data_area[area])
+    end
+
+    # get global parameters
+    max_iteration = get(kwargs, :max_iteration, 1000)
+
+    # initialize the algorithms global counters
+    iteration = 1
+    global_flag_convergence = false
+    global_counters = Dict{Int64, Any}()
+
+    # share global variables
+    Distributed.@everywhere keys(worker_area) begin
+        comms = $comms
+        areas_id = $areas_id
+        worker_area = $worker_area
+        area_worker = $area_worker
+        dopf_method = $dopf_method
+        model_type = $model_type
+        optimizer = $optimizer
+        area_id = worker_area[myid()]
+        data_local = Dict{Int64, Any}(area => take!(comms[0][area]) for area in area_id)
+    end
+
+    # start iteration
+    while iteration <= max_iteration && !global_flag_convergence
+
+        Distributed.@everywhere keys(worker_area) begin
+            for area in area_id
+                if iteration >= initial_iters 
+                    data_local[area]["alpha"] = deepcopy(alpha_config[area])
+                else
+                    data_local[area]["alpha"] = deepcopy(initial_config[area])
+                end
+                # solve local problem and update solution
+                result = solve_pmada_model(data_local[area], model_type, optimizer, dopf_method.build_method, solution_processors=dopf_method.post_processors)
+                update_data!(data_local[area], result["solution"])
+        
+                # send data to neighboring areas
+                for neighbor in data_local[area]["neighbors"] 
+                    shared_data = prepare_shared_data(data_local[area], neighbor)
+                    put!(comms[area][neighbor], shared_data)
+                end
+            end
+        end
+
+        Distributed.@everywhere keys(worker_area) begin
+            for area in area_id
+                # receive data to neighboring areas
+                for neighbor in data_local[area]["neighbors"] 
+                    received_data = take!(comms[neighbor][area])
+                    receive_shared_data!(data_local[area], received_data, neighbor)
+                end
+
+                # calculate and share mismatches
+                dopf_method.update_method(data_local[area])
+                counters = Dict("option"=> data_local[area]["option"], "counter" => data_local[area]["counter"], "mismatch" => data_local[area]["mismatch"])
+                if data_local[area]["option"]["termination_measure"] in ["dual_residual", "mismatch_dual_residual"]
+                    counters["dual_residual"] = data_local[area]["dual_residual"]
+                end
+                put!(comms[area][0], deepcopy(counters))
+            end
+        end
+
+        # receive the mismatches from areas
+        for area in areas_id
+            counters = take!(comms[area][0])
+            global_counters[area] = counters
+        end
+
+        # print progress
+        if mod(iteration,10) == 0
+            print_iteration(global_counters, print_level)
+        end
+
+        # update flag convergence and iteration number
+        global_flag_convergence = update_global_flag_convergence(global_counters)
+        iteration += 1
+
+    end
+
+    # receive the final solution
+    Distributed.@everywhere keys(worker_area) begin
+        for area in area_id
+            # send the area data
+            put!(comms[area][0], data_local[area])
+        end
+    end
+
+    for area in areas_id
+        data_area[area] = take!(comms[area][0])
+    end
+
+    # close the communication channels
+    for i in keys(comms)
+        for j in keys(comms[i])
+            close(comms[i][j])
+        end
+    end
+
+    print_convergence(data_area, print_level)
+    return 200 - iteration #data_area
 end
 
 function vector_to_config(alpha_vector,data_area)
@@ -214,7 +354,7 @@ function LinUCB(V,action,reward,y,beta,nv,lower_bounds,upper_bounds)
     return value.(a),V,y 
 end
 
-function run_linucb(T,data_area,pq_bounds,vt_bounds,initial_config,optimizer,lambda)
+function run_linucb(T,data_area,pq_bounds,vt_bounds,initial_config,optimizer,lambda,initial_iters)
     alpha_config,alpha_vector = get_hyperparameter_configuration(deepcopy(data_area),pq_bounds,vt_bounds) #pull initial config 
     nv = length(alpha_vector)
     V = lambda*Matrix(1.0I, nv, nv)
@@ -225,7 +365,7 @@ function run_linucb(T,data_area,pq_bounds,vt_bounds,initial_config,optimizer,lam
     beta = 1 + sqrt(2*log(T)+nv*log((nv+T)/nv))
 
     for i=1:T 
-        reward = run_then_return_val_loss(deepcopy(data_area),alpha_config,initial_config,optimizer)
+        reward = run_then_return_val_loss(deepcopy(data_area),alpha_config,initial_config,optimizer,initial_iters)
         push!(trace_params["reward"], reward)
         println(i, " :", reward)
         alpha_vector,V,y = LinUCB(V,alpha_vector,reward,y,beta,nv,lower_bounds,upper_bounds)
@@ -233,6 +373,59 @@ function run_linucb(T,data_area,pq_bounds,vt_bounds,initial_config,optimizer,lam
         push!(trace_params["V"], V)
         push!(trace_params["y"], y)
         push!(trace_params["a"], alpha_vector)
+    end
+        
+    return reward,alpha_config,trace_params  
+end
+
+function LinUCB_quad(V,action,reward,y,beta,nv,lower_bounds,upper_bounds,Vq,yq)
+    reward = reward/50 
+    action = action/1000 
+    action_m = reshape(action, length(action), 1)
+    V = V + action_m*transpose(action_m)
+    y = y + reward*action_m 
+    inv_V = inv(V)
+    aq = vcat(action_m, [i^2 for i in action_m])
+    Vq = Vq + aq*transpose(aq)
+    yq = yq + reward*aq 
+    hat_kappa = inv(Vq)*yq 
+    #hat_theta = inv_V * y
+
+    model = Model(Ipopt.Optimizer)
+    #set_optimizer_attribute(model, "NonConvex", 2)
+    @variable(model, lower_bounds[i]/1000 <= a[i=1:nv] <= upper_bounds[i]/1000)
+    @variable(model, u)
+    @objective(model, Max, sum([(hat_kappa[i]*a[i] + hat_kappa[i+nv]*a[i]^2) for i=1:nv]) + sqrt(beta)*u)
+    @constraint(model, transpose(a)*inv_V*a == u^2)
+    optimize!(model)
+    println(termination_status(model))
+
+    return 1000*value.(a),V,y 
+end
+
+function run_linucb_quad(T,data_area,pq_bounds,vt_bounds,initial_config,optimizer,lambda)
+    alpha_config,alpha_vector = get_hyperparameter_configuration(deepcopy(data_area),pq_bounds,vt_bounds) #pull initial config 
+    nv = length(alpha_vector)
+    V = lambda*Matrix(1.0I, nv, nv)
+    y = zeros(nv,1)
+    Vq = lambda*Matrix(1.0I, 2*nv, 2*nv)
+    yq = zeros(2*nv, 1) 
+    lower_bounds,upper_bounds = get_bounds(pq_bounds,vt_bounds,data_area)
+    reward = 0
+    trace_params = Dict("V" => [V], "y" => [y], "a" => [alpha_vector], "reward" => [], "Vq" => [], "yq" => [])
+    beta = 1 + sqrt(2*log(T)+nv*log((nv+T)/nv))
+
+    for i=1:T 
+        reward = run_then_return_val_loss(deepcopy(data_area),alpha_config,initial_config,optimizer)
+        push!(trace_params["reward"], reward)
+        println(i, " :", reward)
+        alpha_vector,V,y = LinUCB_quad(V,alpha_vector,reward,y,beta,nv,lower_bounds,upper_bounds,Vq,yq)
+        alpha_config = vector_to_config(alpha_vector,deepcopy(data_area))
+        push!(trace_params["V"], V)
+        push!(trace_params["y"], y)
+        push!(trace_params["a"], alpha_vector)
+        push!(trace_params["Vq"], Vq)
+        push!(trace_params["yq"], yq)
     end
         
     return reward,alpha_config,trace_params  

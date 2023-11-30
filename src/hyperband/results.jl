@@ -4,7 +4,10 @@ using PowerModelsADA
 include("linucb_functions.jl")
 
 run_num = 1
-stuff = BSON.load("data/hyperband/linucb_$run_num.jl")
+casename = "case30"
+n_areas = 3
+need_csv = 1
+stuff = BSON.load("data/hyperband/linucb_$casename"*"_$run_num.jl")
 trace_params = stuff["trace"]
 
 hat_thetas = []
@@ -20,8 +23,13 @@ hat_theta = hat_thetas[end]
 V = trace_params["V"][end]
 inv_V = inv(V)
 
-case_path = "data/case118_3.m"
+case_path = "data/$casename.m"
 data = parse_file(case_path)
+if (need_csv == 1)
+    partition_path= "data/$casename"*"_$n_areas.csv"
+    assign_area!(data, partition_path)
+end
+
 model_type = ACPPowerModel
 dopf_method = adaptive_admm_methods 
 tol = 1e-4 
@@ -47,10 +55,26 @@ beta = 1 + sqrt(2*log(T)+nv*log((nv+T)/nv))
 model = Model(Ipopt.Optimizer)
 #set_optimizer_attribute(model, "NonConvex", 2)
 @variable(model, lower_bounds[i] <= a[i=1:nv] <= upper_bounds[i])
-@objective(model, Max, dot(hat_theta,a))
+#@objective(model, Max, dot(hat_theta,a))
 @variable(model, u)
 @objective(model, Max, dot(hat_theta,a) + sqrt(beta)*u)
 @constraint(model, transpose(a)*inv_V*a == u^2)
+optimize!(model)
+println(termination_status(model))
+
+alpha_vector = value.(a)
+alpha_config = vector_to_config(alpha_vector,deepcopy(data_area))
+reward = run_then_return_val_loss(deepcopy(data_area),alpha_config,initial_config,optimizer)
+
+println("Iterations to converge: ", 200 - reward)
+
+model = Model(Ipopt.Optimizer)
+#set_optimizer_attribute(model, "NonConvex", 2)
+@variable(model, lower_bounds[i] <= a[i=1:nv] <= upper_bounds[i])
+@objective(model, Max, dot(hat_theta,a))
+#@variable(model, u)
+#@objective(model, Max, dot(hat_theta,a) + sqrt(beta)*u)
+#@constraint(model, transpose(a)*inv_V*a == u^2)
 optimize!(model)
 println(termination_status(model))
 
