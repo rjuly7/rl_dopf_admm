@@ -1,5 +1,10 @@
+using Distributed 
 using Gurobi 
+using LinearAlgebra
 using Ipopt 
+using JuMP 
+using BSON 
+using Plots 
 using PowerModelsADA 
 include("linucb_functions.jl")
 
@@ -64,7 +69,8 @@ println(termination_status(model))
 
 alpha_vector = value.(a)
 alpha_config = vector_to_config(alpha_vector,deepcopy(data_area))
-reward = run_then_return_val_loss(deepcopy(data_area),alpha_config,initial_config,optimizer)
+initial_iters = 20
+reward = run_then_return_val_loss(deepcopy(data_area),alpha_config,initial_config,optimizer,initial_iters)
 
 println("Iterations to converge: ", 200 - reward)
 
@@ -80,6 +86,6 @@ println(termination_status(model))
 
 alpha_vector = value.(a)
 alpha_config = vector_to_config(alpha_vector,deepcopy(data_area))
-reward = run_then_return_val_loss(deepcopy(data_area),alpha_config,initial_config,optimizer)
+reward = run_then_return_val_loss(deepcopy(data_area),alpha_config,initial_config,optimizer,initial_iters)
 
 println("Iterations to converge: ", 200 - reward)

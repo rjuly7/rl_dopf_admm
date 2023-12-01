@@ -47,7 +47,7 @@ dopf_method = adaptive_admm_methods
 tol = 1e-4 
 du_tol = 0.1 
 max_iteration = 1000
-optimizer = Ipopt.Optimizer 
+optimizer = optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0)
 
 data_area = initialize_dopf(data, model_type, dopf_method, max_iteration, tol, du_tol)
 
