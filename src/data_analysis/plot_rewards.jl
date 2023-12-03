@@ -20,8 +20,8 @@ data = parse_file(case_path)
 
 rng = StableRNG(123)
 
-run_nums = [6,6,6,6,5,7,7]
-num_iters = [5000, 8000, 12000, 16000, 20000, 24000, 30000]
+run_nums = [6,6,6,6,5,7,7,9]
+num_iters = [5000, 8000, 12000, 16000, 20000, 24000, 30000, 40000]
 approx_iters = []
 target_iters = []
 alpha_traces = []
@@ -36,6 +36,9 @@ for i in eachindex(run_nums)
     elseif run_num == 7
         pq_alpha_values = 200:50:800
         vt_alpha_values = 2800:100:4800
+    elseif run_num == 9
+        pq_alpha_values = 200:10:900
+        vt_alpha_values = 2500:20:5000
     end
     
     env = ADMMEnv(data, pq_alpha_values, vt_alpha_values, rng, baseline_alpha_pq = 400, baseline_alpha_vt = 4000, alpha_update_freq = 5)
@@ -106,3 +109,6 @@ plot(line_plot_costs["x"],line_plot_costs["y"],label="RL policy",color=plot_colo
 plot!(line_plot_costs["x"],baseline,label="Baseline",color=plot_colors[2],linewidth=2.4,alpha=0.7)
 scatter!(marker_plot_costs["x"],marker_plot_costs["y"],markercolor=plot_colors[1],markershape=:circle,markerstrokewidth=0.8,label="")
 savefig("data/figs/iter_vs_final_steps.png")
+
+ep_rewards = [r for r in agent.trajectory.traces.reward if r > 10]
+plot(ep_rewards)

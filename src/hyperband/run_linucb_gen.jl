@@ -6,7 +6,7 @@ pq_upper = 800
 vt_lower = 3000
 vt_upper = 5000
 T = 1
-run_num = 1
+run_num = 2
 
 if lastindex(ARGS) >= 9
     casename = ARGS[1]
@@ -33,7 +33,10 @@ using LinearAlgebra
 using JuMP 
 @everywhere using Ipopt 
 using BSON 
+using PowerModels 
+using Random 
 include("linucb_functions.jl")
+Random.seed!(123)
 
 case_path = "data/$casename.m"
 data = parse_file(case_path)
@@ -61,5 +64,5 @@ lambda = 0.05
 
 initial_iters = 20
 
-reward,alpha_config,trace_params = run_linucb(T,data_area,pq_bounds,vt_bounds,initial_config,optimizer,lambda,initial_iters)
+reward,alpha_config,trace_params = run_linucb(T,data,pq_bounds,vt_bounds,initial_config,optimizer,lambda,initial_iters)
 bson("data/hyperband/linucb_$casename"*"_$pq_lower"*"_$pq_upper"*"_$vt_lower"*"_$vt_upper"*"_$run_num.jl", Dict("alpha_config" => alpha_config, "reward" => reward, "trace" => trace_params))

@@ -283,7 +283,34 @@ function LinUCB(V,action,reward,y,beta,nv,lower_bounds,upper_bounds)
     return value.(a),V,y 
 end
 
-function run_linucb(T,data_area,pq_bounds,vt_bounds,initial_config,optimizer,lambda,initial_iters)
+function get_perturbed_data_area(data)
+    model_type = ACPPowerModel
+    dopf_method = adaptive_admm_methods 
+    tol = 1e-4 
+    du_tol = 0.1 
+    max_iteration = 1000
+    data_orig = deepcopy(data)
+    for (i,load) in data_orig["load"]
+        r = rand() - 0.4
+        data["load"][i]["pd"] = load["pd"]*(1+r)
+        data["load"][i]["qd"] = load["qd"]*(1+r)
+    end
+    optimizer = optimizer_with_attributes(Ipopt.Optimizer, "print_level" => 0)
+    checker = solve_ac_opf(data,optimizer)
+    println(checker["termination_status"] == LOCALLY_SOLVED)
+    while checker["termination_status"] != LOCALLY_SOLVED
+        for (i,load) in data_orig["load"]
+            r = rand() - 0.4
+            data["load"][i]["pd"] = load["pd"]*(1+r)
+            data["load"][i]["qd"] = load["qd"]*(1+r)
+        end
+        checker = solve_ac_opf(data,optimizer)
+    end
+    data_area = initialize_dopf(data, model_type, dopf_method, max_iteration, tol, du_tol)
+    return data_area 
+end
+
+function run_linucb(T,data,pq_bounds,vt_bounds,initial_config,optimizer,lambda,initial_iters)
     alpha_config,alpha_vector = get_hyperparameter_configuration(deepcopy(data_area),pq_bounds,vt_bounds) #pull initial config 
     nv = length(alpha_vector)
     V = lambda*Matrix(1.0I, nv, nv)
@@ -294,7 +321,8 @@ function run_linucb(T,data_area,pq_bounds,vt_bounds,initial_config,optimizer,lam
     beta = 1 + sqrt(2*log(T)+nv*log((nv+T)/nv))
 
     for i=1:T 
-        reward = run_then_return_val_loss_mp(deepcopy(data_area),alpha_config,initial_config,optimizer,initial_iters)
+        data_area = get_perturbed_data_area(deepcopy(data))
+        reward = run_then_return_val_loss_mp(data_area,alpha_config,initial_config,optimizer,initial_iters)
         push!(trace_params["reward"], reward)
         println(i, " :", reward)
         alpha_vector,V,y = LinUCB(V,alpha_vector,reward,y,beta,nv,lower_bounds,upper_bounds)
