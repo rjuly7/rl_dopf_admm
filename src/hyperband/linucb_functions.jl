@@ -32,7 +32,7 @@ function run_then_return_val_loss(data_area,alpha_config,initial_config,optimize
     #at each iteration
     areas_id = get_areas_id(data_area)
     iteration = 1 
-
+    max_iteration = 1000
     #data_area = perturb_loads(data_area)
 
     while iteration < max_iteration && !flag_convergence

@@ -9,22 +9,22 @@ using PowerModelsADA
 include("linucb_functions.jl")
 
 #case118 
-pqs_l = [100, 100, 100, 150, 200, 250, 300, 350, 375]
-pqs_u = [3200, 2800, 2000, 1200, 900, 700, 600, 500, 450]
+pqs_l = [100, 100, 100, 100, 100, 150, 200, 250, 300, 350, 375]
+pqs_u = [4000, 3600, 3200, 2800, 2000, 1200, 900, 700, 600, 500, 450]
 
-vts_l = [1400, 1600, 2000, 2400, 2800, 3200, 3600, 3800, 3900]
-vts_u = [7000, 6500, 6000, 5600, 5200, 4800, 4400, 4200, 4100]
+vts_l = [800, 1200, 1400, 1600, 2000, 2400, 2800, 3200, 3600, 3800, 3900]
+vts_u = [9000, 7200, 7000, 6500, 6000, 5600, 5200, 4800, 4400, 4200, 4100]
 
 #case30
-pqs_l = [100, 100, 150, 200, 250, 300, 350]
-pqs_u = [2800, 2000, 1200, 900, 700, 600, 500]
+# pqs_l = [100, 100, 150, 200, 250, 300, 350]
+# pqs_u = [2800, 2000, 1200, 900, 700, 600, 500]
 
-vts_l = [1600, 2000, 2400, 2800, 3200, 3600, 3800]
-vts_u = [6500, 6000, 5600, 5200, 4800, 4400, 4200]
+# vts_l = [1600, 2000, 2400, 2800, 3200, 3600, 3800]
+# vts_u = [6500, 6000, 5600, 5200, 4800, 4400, 4200]
 
 run_num = 1
-casename = "case30"
-need_csv = 1
+casename = "case118_3"
+need_csv = 0
 
 n_iters = []
 for b_num in eachindex(pqs_l)
@@ -107,6 +107,7 @@ for b_num in eachindex(pqs_l)
 
     alpha_vector = value.(a)
     alpha_config = vector_to_config(alpha_vector,deepcopy(data_area))
+    initial_iters = 20
     reward = run_then_return_val_loss(deepcopy(data_area),alpha_config,initial_config,optimizer,initial_iters)
 
     push!(n_iters, 200-reward)
@@ -127,6 +128,11 @@ du_tol = 0.1
 max_iteration = 1000
 optimizer = Ipopt.Optimizer 
 
+initial_iters = 20 
+alpha_pq = 400
+alpha_vt = 4000 
+initial_config = set_hyperparameter_configuration(data_area,alpha_pq,alpha_vt)
+data_area = initialize_dopf(data, model_type, dopf_method, max_iteration, tol, du_tol)
 baseline_r = run_then_return_val_loss(deepcopy(data_area),initial_config,initial_config,optimizer,initial_iters)
 println("Iterations to converge: ", 200 - reward)
 baseline_iter = 200 - baseline_r 
