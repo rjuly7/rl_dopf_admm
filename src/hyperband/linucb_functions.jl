@@ -273,14 +273,14 @@ function LinUCB(V,action,reward,y,beta,nv,lower_bounds,upper_bounds)
     model = Model(Ipopt.Optimizer)
     set_optimizer_attribute(model, "print_level", 0)
     #set_optimizer_attribute(model, "NonConvex", 2)
-    @variable(model, lower_bounds[i] <= a[i=1:nv] <= upper_bounds[i])
+    @variable(model, lower_bounds[i]/1000 <= a[i=1:nv] <= upper_bounds[i]/1000)
     @variable(model, u)
     @objective(model, Max, dot(hat_theta,a) + sqrt(beta)*u)
     @constraint(model, transpose(a)*inv_V*a == u^2)
     optimize!(model)
     println(termination_status(model))
 
-    return value.(a),V,y 
+    return 1000*value.(a),V,y 
 end
 
 function get_perturbed_data_area(data)

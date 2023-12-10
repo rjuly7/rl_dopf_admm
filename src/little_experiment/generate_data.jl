@@ -1,7 +1,7 @@
 casename = "case118_3" 
 n_areas = 3
 need_csv = 0
-N = 2 
+N = 20
 run_num = "1"
 
 if lastindex(ARGS) >= 5
@@ -79,7 +79,7 @@ alpha_config = vector_to_config(alpha_vector,deepcopy(data_area))
 initial_iters = 20
 
 all_vectors = @distributed (append!) for i = 1:N 
-    data_area,load_vector = get_perturbed_data_area(data,model_type,dopf_method,tol,du_tol,max_iteration,load_map)
+    data_area,load_vector = get_perturbed_data_area(deepcopy(data),model_type,dopf_method,tol,du_tol,max_iteration,load_map)
     vars_vector = run_dopf_mp(initial_config,alpha_config,data_area,model_type,dopf_method,primal_map,dual_map,initial_iters)
     [(load_vector,vars_vector)]
 end

@@ -125,7 +125,9 @@ function RLBase.reset!(env::ACADMMEnv)
     nothing
 end
 
-function (env::ACADMMEnv)(a::Vector{AbstractFloat})
+function (env::ACADMMEnv)(a)
+    println(a)
+    println(typeof(a))
     @assert a in env.action_space
     env.action = a
     _step!(env, a)

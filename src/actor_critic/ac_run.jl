@@ -47,9 +47,13 @@ agent = Agent(
         update_freq = 2,
     ),
     trajectory = PPOTrajectory(;
-        capacity = 50000,
-        state = Matrix{Float32} => (ns)
-    ),
+    capacity = 10000,
+    state = Matrix{Float32} => (ns, 1),
+    action = Vector{Int} => (na,1),
+    action_log_prob = Vector{Float32} => (1,),
+    reward = Vector{Float32} => (1,),
+    terminal = Vector{Bool} => (1,),
+),
 )
 
 hook = ComposedHook(TotalRewardPerEpisode())

@@ -264,6 +264,7 @@ function get_perturbed_data_area(data,model_type,dopf_method,tol,du_tol,max_iter
             load_vector[load_map[i]["qd"]] = data["load"][i]["qd"]
         end
         checker = solve_ac_opf(data,optimizer)
+        println(checker["termination_status"] == LOCALLY_SOLVED)
     end
     data_area = initialize_dopf(data, model_type, dopf_method, max_iteration, tol, du_tol)
     return data_area, load_vector 

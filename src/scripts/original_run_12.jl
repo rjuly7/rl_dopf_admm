@@ -1,4 +1,4 @@
-#I think this was the best one 
+########this is a good one############
 using Pkg 
 Pkg.activate(".")
 
@@ -20,13 +20,13 @@ data = parse_file(case_path)
 pq_alpha_values = [200, 350, 400, 450, 600, 800]
 vt_alpha_values = [2800, 3200, 3600, 3800, 4000, 4200, 4600]
 
-pq_alpha_values = 200:50:800
-vt_alpha_values = 2800:100:4800
+pq_alpha_values = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
+vt_alpha_values = [500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 5500, 7000]
 
-env = ADMMEnv(data, pq_alpha_values, vt_alpha_values, rng, baseline_alpha_pq = 400, baseline_alpha_vt = 4000, alpha_update_freq = 5)
+env = ADMMEnv(data, pq_alpha_values, vt_alpha_values, rng, baseline_alpha_pq = 400, baseline_alpha_vt = 4000, alpha_update_freq = 10)
 ns, na = length(state(env)), length(action_space(env))
 
-run_num = 7
+run_num = 12
 sub_num = 24000
 
 agent = Agent(
@@ -52,9 +52,9 @@ agent = Agent(
             ),
             loss_func = mse,
             stack_size = nothing,
-            batch_size = 100,
+            batch_size = 400,
             update_horizon = 1,
-            min_replay_history = 100,
+            min_replay_history = 600,
             update_freq = 2,
             target_update_freq = 50,
             rng = rng,
