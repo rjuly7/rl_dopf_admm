@@ -43,8 +43,12 @@ for n in eachindex(dataset_list)
 end   
 
 Xtrain, ytrain, Xtest, ytest = get_dataset(filenames,trainsize)
+n_out = length(axes(ytrain,1))
+primal_end = Int(n_out/2)
+ytrain = ytrain[primal_end+1:end,:]
+ytest = ytest[primal_end+1:end,:]
 
-println(size(Xtrain))
+println(size(Xtrain), "  ", size(ytrain))
 
 n_in = length(axes(Xtrain,1))
 n_out = length(axes(ytrain,1))
@@ -52,7 +56,7 @@ n_mid = n_in*2
 
 model = Chain(Dense(n_in,n_mid,relu), Dense(n_mid,n_mid,relu), Dense(n_mid,n_mid,relu), Dense(n_mid,n_out,identity))
 
-opt = ADAM(5e-4)  
+opt = ADAM(1e-3)  
 loss_tr = Vector{Float32}()
 val_tr = Vector{Float32}()
 params = Flux.params(model)
@@ -79,4 +83,4 @@ for i in axes(pred,1)
     end
 end
 
-bson("$path/data/little_experiment/nn_$nn_num.bson", Dict(:nn => model, :test_loss => test_loss, :loss_tr => loss_tr, :val_tr => val_tr, :errors => errors))
+bson("$path/data/little_experiment/$casename"*"_nn$nn_num"*"_dual.bson", Dict(:nn => model, :test_loss => test_loss, :loss_tr => loss_tr, :val_tr => val_tr, :errors => errors))

@@ -1,5 +1,5 @@
 using Distributed 
-addprocs(3)
+#addprocs(3)
 
 @everywhere using Pkg 
 @everywhere Pkg.activate(".")
@@ -8,15 +8,14 @@ using LinearAlgebra
 @everywhere using Ipopt 
 @everywhere using JuMP 
 using BSON 
-using Plots 
 @everywhere using PowerModels 
 @everywhere using PowerModelsADA 
 @everywhere include("linucb_functions.jl")
 
-casename = "case30"
+casename = "case118_3"
 n_areas = 3
-need_csv = 1
-run_num = "1"
+need_csv = 0
+run_num = "2"
 n_repeat = 10
 if lastindex(ARGS) >= 5
     casename = ARGS[1]
@@ -29,11 +28,11 @@ else
 end
 
 if casename == "case118_3"
-    pqs_l = [100, 100, 100, 100, 100, 150, 200, 250, 300, 350, 375]
-    pqs_u = [4000, 3600, 3200, 2800, 2000, 1200, 900, 700, 600, 500, 450]
+    pqs_l = [100]
+    pqs_u = [5000]
 
-    vts_l = [800, 1200, 1400, 1600, 2000, 2400, 2800, 3200, 3600, 3800, 3900]
-    vts_u = [9000, 7200, 7000, 6500, 6000, 5600, 5200, 4800, 4400, 4200, 4100]
+    vts_l = [500]
+    vts_u = [12000]
 elseif casename == "case30"
 #case30
     pqs_l = [100, 100, 150, 200, 250, 300, 350]
@@ -105,54 +104,56 @@ for b_num in eachindex(pqs_l)
 end
 
 #Get baseline 
-n_baseline_repeat = @distributed (append!) for repeat=1:n_repeat 
-    data_area = get_perturbed_data_area(deepcopy(data))
-    alpha_pq = 400
-    alpha_vt = 4000 
-    initial_config = set_hyperparameter_configuration(data_area,alpha_pq,alpha_vt)
+# n_baseline_repeat = @distributed (append!) for repeat=1:n_repeat 
+#     data_area = get_perturbed_data_area(deepcopy(data))
+#     alpha_pq = 400
+#     alpha_vt = 4000 
+#     initial_config = set_hyperparameter_configuration(data_area,alpha_pq,alpha_vt)
 
-    optimizer = optimizer_with_attributes(Ipopt.Optimizer, "print_level" => 0)
-    reward = run_then_return_val_loss(deepcopy(data_area),initial_config,initial_config,optimizer,initial_iters)
+#     optimizer = optimizer_with_attributes(Ipopt.Optimizer, "print_level" => 0)
+#     reward = run_then_return_val_loss(deepcopy(data_area),initial_config,initial_config,optimizer,initial_iters)
 
-    println("Iterations to converge: ", 200 - reward)
-    [200 - reward]
-end
+#     println("Iterations to converge: ", 200 - reward)
+#     [200 - reward]
+# end
+b_num = 1
+pq_lower = pqs_l[b_num]
+pq_upper = pqs_u[b_num]
+vt_lower = vts_l[b_num]
+vt_upper = vts_u[b_num]
+bson("data/hyperband/$casename"*"_results"*"_$pq_lower"*"_$pq_upper"*"_$vt_lower"*"_$vt_upper.jl", Dict("n_iters_all" => n_iters_all))
 
-bson("data/hyperband/$casename"*"_results.jl", Dict("n_iters_all" => n_iters_all))
-using StatsBase 
-n_iters_mean = [mean(n_iters_all[i]) for i in eachindex(n_iters_all)]
+# case_path = "data/$casename.m"
+# data = parse_file(case_path)
+# if (need_csv == 1)
+#     partition_path= "data/$casename"*"_$n_areas.csv"
+#     assign_area!(data, partition_path)
+# end
 
-case_path = "data/$casename.m"
-data = parse_file(case_path)
-if (need_csv == 1)
-    partition_path= "data/$casename"*"_$n_areas.csv"
-    assign_area!(data, partition_path)
-end
+# model_type = ACPPowerModel
+# dopf_method = adaptive_admm_methods 
+# tol = 1e-4 
+# du_tol = 0.1 
+# max_iteration = 1000
+# optimizer = Ipopt.Optimizer 
 
-model_type = ACPPowerModel
-dopf_method = adaptive_admm_methods 
-tol = 1e-4 
-du_tol = 0.1 
-max_iteration = 1000
-optimizer = Ipopt.Optimizer 
+# initial_iters = 20 
+# alpha_pq = 400
+# alpha_vt = 4000 
+# data_area = initialize_dopf(data, model_type, dopf_method, max_iteration, tol, du_tol)
 
-initial_iters = 20 
-alpha_pq = 400
-alpha_vt = 4000 
-data_area = initialize_dopf(data, model_type, dopf_method, max_iteration, tol, du_tol)
+# initial_config = set_hyperparameter_configuration(data_area,alpha_pq,alpha_vt)
+# data_area = initialize_dopf(data, model_type, dopf_method, max_iteration, tol, du_tol)
+# baseline_r = run_then_return_val_loss(deepcopy(data_area),initial_config,initial_config,optimizer,initial_iters)
+# println("Iterations to converge: ", 200 - reward)
+# baseline_iter = 200 - baseline_r 
+# spread = pqs_u - pqs_l + vts_u - vts_l 
+# plot(spread,n_iters,ylim=(0,baseline_iter + 10),linewidth=2,label="LinUCB",xlabel="Length of search space",ylabel="Iterations to converge")
+# plot!(spread,baseline_iter*ones(length(spread)),linewidth=2,label="Baseline")
+# savefig("data/figs/$casename"*"_iters_vs_space.png")
 
-initial_config = set_hyperparameter_configuration(data_area,alpha_pq,alpha_vt)
-data_area = initialize_dopf(data, model_type, dopf_method, max_iteration, tol, du_tol)
-baseline_r = run_then_return_val_loss(deepcopy(data_area),initial_config,initial_config,optimizer,initial_iters)
-println("Iterations to converge: ", 200 - baseline_r)
-baseline_iter = 200 - baseline_r 
-spread = pqs_u - pqs_l + vts_u - vts_l 
-plot(spread,n_iters_mean,ylim=(0,baseline_iter + 10),linewidth=2,label="LinUCB",xlabel="Length of search space",ylabel="Iterations to converge")
-plot!(spread,baseline_iter*ones(length(spread)),linewidth=2,label="Baseline")
-savefig("data/figs/$casename"*"_iters_vs_space.png")
-
-plot(spread, pqs_l, fillrange = pqs_u, fillalpha = 0.35, label = "PQ values",xlabel="Length of search space", ylabel="Search values")
-plot!(spread, vts_l, fillrange = vts_u, fillalpha = 0.35, label = "VT values")
-plot!(spread,4000*ones(length(spread)),line=:dash,linewidth=2,color="black",label="Baseline PQ")
-plot!(spread,400*ones(length(spread)),line=:dot,linewidth=2,color="black",label="Baseline VT")
-savefig("data/figs/$casename"*"_bounds.png")
+# plot(spread, pqs_l, fillrange = pqs_u, fillalpha = 0.35, label = "PQ values",xlabel="Length of search space", ylabel="Search values")
+# plot!(spread, vts_l, fillrange = vts_u, fillalpha = 0.35, label = "VT values")
+# plot!(spread,4000*ones(length(spread)),line=:dash,linewidth=2,color="black",label="Baseline PQ")
+# plot!(spread,400*ones(length(spread)),line=:dot,linewidth=2,color="black",label="Baseline VT")
+# savefig("data/figs/$casename"*"_bounds.png")

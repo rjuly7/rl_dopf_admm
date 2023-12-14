@@ -50,7 +50,7 @@ n_in = length(axes(Xtrain,1))
 n_out = length(axes(ytrain,1))
 n_mid = n_in*2 
 
-model = Chain(Dense(n_in,n_mid,relu), Dense(n_mid,n_mid,relu), Dense(n_mid,n_mid,relu), Dense(n_mid,n_out,identity))
+model = BSON.load("$path/data/little_experiment/nn_$nn_num.bson")[:nn]
 
 opt = ADAM(5e-4)  
 loss_tr = Vector{Float32}()
@@ -79,4 +79,5 @@ for i in axes(pred,1)
     end
 end
 
+nn_num = nn_num + 10
 bson("$path/data/little_experiment/nn_$nn_num.bson", Dict(:nn => model, :test_loss => test_loss, :loss_tr => loss_tr, :val_tr => val_tr, :errors => errors))
