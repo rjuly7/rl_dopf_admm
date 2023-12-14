@@ -133,6 +133,80 @@ function run_dopf_mp(initial_config,alpha_config,data_area,model_type,dopf_metho
     return train_vector  
 end 
 
+function run_iterations(initial_config,alpha_config,data_area,model_type,dopf_method,primal_map,dual_map,initial_iters)
+    flag_convergence = false
+    #We want to store the 2-norm of primal and dual residuals
+    #at each iteration
+    areas_id = get_areas_id(data_area)
+    iteration = 1 
+    optimizer = optimizer_with_attributes(Ipopt.Optimizer, "print_level" => 0)
+
+    #data_area = perturb_loads(data_area)
+
+    while iteration < max_iteration && !flag_convergence
+        # overwrite any changes the adaptive algorithm made to alphas in last iteration 
+        if iteration >= initial_iters 
+            for area in areas_id 
+                data_area[area]["alpha"] = deepcopy(alpha_config[area])
+            end
+        else
+            for area in areas_id 
+                data_area[area]["alpha"] = deepcopy(initial_config[area])
+            end
+        end
+
+        #info = @capture_out begin
+        for area in areas_id 
+            dr = solve_pmada_model(data_area[area], model_type, optimizer, dopf_method.build_method, solution_processors=dopf_method.post_processors)
+            update_data!(data_area[area], dr["solution"]) 
+        end
+        #end
+
+        # share solution with neighbors, the shared data is first obtained to facilitate distributed implementation
+        for area in areas_id # sender subsystem
+            for neighbor in data_area[area]["neighbors"] # receiver subsystem
+                shared_data = prepare_shared_data(data_area[area], neighbor)
+                receive_shared_data!(data_area[neighbor], deepcopy(shared_data), area)
+            end
+        end
+    
+        # calculate mismatches and update convergence flags
+        Threads.@threads for area in areas_id
+            dopf_method.update_method(data_area[area])
+            save_solution!(data_area[area])
+        end
+
+        # check global convergence and update iteration counters
+        flag_convergence = update_global_flag_convergence(data_area)
+
+        # print solution
+        if mod(iteration, 10) == 1
+            #print_iteration(data_area, print_level, [info])
+            pri_resid = sqrt(sum(data_area[area]["mismatch"][string(area)]^2 for area in areas_id))
+            du_resid = sqrt(sum(data_area[area]["dual_residual"][string(area)]^2 for area in areas_id))
+            println("Iteration: ", iteration, "   pri: ", pri_resid, "  du: ", du_resid)
+        end
+
+        iteration += 1
+    end
+
+    n_shared = sum(1 for area in areas_id for n in keys(data_area[area]["shared_variable"]) for v in keys(data_area[area]["shared_variable"][n]) for k in keys(data_area[area]["shared_variable"][n][v]))
+
+    train_vector = zeros(2*n_shared,1)
+    for area in areas_id 
+        for n in keys(data_area[area]["shared_variable"])
+            for v in keys(data_area[area]["shared_variable"][n])
+                for k in keys(data_area[area]["shared_variable"][n][v])
+                    train_vector[primal_map[area][n][v][k]] = data_area[area]["shared_variable"][n][v][k] 
+                    train_vector[dual_map[area][n][v][k]] = data_area[area]["dual_variable"][n][v][k] 
+                end
+            end
+        end
+    end
+
+    return train_vector, iteration  
+end 
+
 function get_hyperparameter_configuration(data_area,pq_bounds,vt_bounds)
     alpha_config = Dict(area_id => deepcopy(data_area[area_id]["alpha"]) for area_id in keys(data_area)) 
     alpha_vector = []

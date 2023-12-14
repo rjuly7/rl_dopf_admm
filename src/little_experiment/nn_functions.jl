@@ -52,3 +52,17 @@ function get_dataset(data_path, trainsize)
     ytest = output[:,test_idcs]  
     return Xtrain, ytrain, Xtest, ytest 
 end
+
+function warm_start(data_area,primal_map,dual_map,nn_pred)
+    for area in keys(data_area)
+        for n in keys(data_area[area]["shared_variable"])
+            for v in keys(data_area[area]["shared_variable"][n])
+                for k in keys(data_area[area]["shared_variable"][n][v])
+                    data_area[area]["shared_variable"][n][v][k] = nn_pred[primal_map[area][n][v][k]]
+                    data_area[area]["dual_variable"][n][v][k] = nn_pred[dual_map[area][n][v][k]] 
+                end
+            end
+        end
+    end
+    return data_area 
+end
