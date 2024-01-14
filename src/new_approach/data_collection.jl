@@ -24,31 +24,6 @@ function initialize_dopf(data, model_type, dopf_method, max_iteration, tol, du_t
     return data_area 
 end
 
-
-function test_initialize_dopf(data, model_type, dopf_method, max_iteration, tol, du_tol)
-    areas_id = get_areas_id(data)
-
-    if length(areas_id) < 2
-        error("Number of areas is less than 2, at least 2 areas is needed")
-    end
-
-    # decompose the system into subsystems
-    data_area = Dict{Int64, Any}()
-    for area in areas_id
-        data_area[area] = decompose_system(data, area)
-    end
-
-    # get areas ids
-    areas_id = get_areas_id(data_area)
-
-    # initilize distributed power model parameters
-    for area in areas_id
-        dopf_method.initialize_method(data_area[area], model_type, max_iteration=max_iteration, termination_measure="mismatch_dual_residual", mismatch_method="norm", tol=tol, tol_dual=du_tol)
-    end
-
-    return data_area 
-end
-
 function create_maps(data,data_area)
     areas_id = get_areas_id(data_area)
     primal_map = Dict()
@@ -84,7 +59,7 @@ function create_maps(data,data_area)
     return primal_map, dual_map, load_map 
 end
 
-function run_dopf_mp(initial_config,alpha_config,data_area,model_type,dopf_method,primal_map,dual_map,initial_iters)
+function run_iterations(alpha_config,data_area,model_type,dopf_method,primal_map,dual_map,n_iters,print_level)
     flag_convergence = false
     #We want to store the 2-norm of primal and dual residuals
     #at each iteration
@@ -92,18 +67,11 @@ function run_dopf_mp(initial_config,alpha_config,data_area,model_type,dopf_metho
     iteration = 1 
     optimizer = optimizer_with_attributes(Ipopt.Optimizer, "print_level" => 0)
 
-    #data_area = perturb_loads(data_area)
-
-    while iteration < max_iteration && !flag_convergence
+    #while iteration < max_iteration && !flag_convergence
+    for iteration=1:n_iters 
         # overwrite any changes the adaptive algorithm made to alphas in last iteration 
-        if iteration >= initial_iters 
-            for area in areas_id 
-                data_area[area]["alpha"] = deepcopy(alpha_config[area])
-            end
-        else
-            for area in areas_id 
-                data_area[area]["alpha"] = deepcopy(initial_config[area])
-            end
+        for area in areas_id 
+            data_area[area]["alpha"] = deepcopy(alpha_config[area])
         end
 
         #info = @capture_out begin
@@ -120,25 +88,24 @@ function run_dopf_mp(initial_config,alpha_config,data_area,model_type,dopf_metho
                 receive_shared_data!(data_area[neighbor], deepcopy(shared_data), area)
             end
         end
+
     
         # calculate mismatches and update convergence flags
         Threads.@threads for area in areas_id
             dopf_method.update_method(data_area[area])
-            save_solution!(data_area[area])
         end
+
 
         # check global convergence and update iteration counters
         flag_convergence = update_global_flag_convergence(data_area)
 
         # print solution
-        if mod(iteration, 10) == 1
+        if mod(iteration, 10) == 1 && print_level 
             #print_iteration(data_area, print_level, [info])
             pri_resid = sqrt(sum(data_area[area]["mismatch"][string(area)]^2 for area in areas_id))
             du_resid = sqrt(sum(data_area[area]["dual_residual"][string(area)]^2 for area in areas_id))
             println("Iteration: ", iteration, "   pri: ", pri_resid, "  du: ", du_resid)
         end
-
-        iteration += 1
     end
 
     n_shared = sum(1 for area in areas_id for n in keys(data_area[area]["shared_variable"]) for v in keys(data_area[area]["shared_variable"][n]) for k in keys(data_area[area]["shared_variable"][n][v]))
@@ -155,215 +122,53 @@ function run_dopf_mp(initial_config,alpha_config,data_area,model_type,dopf_metho
         end
     end
 
-    return train_vector  
+    pri_resid = sqrt(sum(data_area[area]["mismatch"][string(area)]^2 for area in areas_id))
+    du_resid = sqrt(sum(data_area[area]["dual_residual"][string(area)]^2 for area in areas_id))
+
+    return train_vector, pri_resid, du_resid   
 end 
 
-function test_solve_dopf_sp(data_area::Dict{Int64, <:Any}, model_type::DataType, optimizer, dopf_method::Module)
-    # initialize the algorithms global counters
-    iteration = 1
-    flag_convergence = false
-
-    # start iteration
-    while iteration <= max_iteration && !flag_convergence
-
-        # solve local problem and update solution
-        info = @capture_out begin
-            Threads.@threads for area in areas_id
-                result = solve_pmada_model(data_area[area], model_type, optimizer, dopf_method.build_method, solution_processors=dopf_method.post_processors)
-                update_data!(data_area[area], result["solution"])
-            end
-        end
-
-        # share solution with neighbors, the shared data is first obtained to facilitate distributed implementation
-        for area in areas_id # sender subsystem
-            for neighbor in data_area[area]["neighbors"] # receiver subsystem
-                shared_data = prepare_shared_data(data_area[area], neighbor)
-                receive_shared_data!(data_area[neighbor], deepcopy(shared_data), area)
-            end
-        end
-
-        # calculate mismatches and update convergence flags
-        Threads.@threads for area in areas_id
-            dopf_method.update_method(data_area[area])
-        end
-
-        # print solution
-        print_iteration(data_area, print_level, [info])
-
-        # check global convergence and update iteration counters
-        flag_convergence = update_global_flag_convergence(data_area)
-        iteration += 1
-
+function gen_dataset(n_runs,n_iters,data,alpha_config)
+    all_vectors = @distributed (append!) for i = 1:n_runs 
+        data_area,load_vector = get_perturbed_data_area(deepcopy(data),model_type,dopf_method,tol,du_tol,max_iteration,load_map)
+        vars_vector,pri_resid,du_resid = run_iterations(alpha_config,data_area,model_type,dopf_method,primal_map,dual_map,n_iters)
+        [(load_vector,vars_vector)]
     end
 
-    print_convergence(data_area, print_level)
-    return data_area
+    X = all_vectors[1][1]
+    y = all_vectors[1][2]
+    for ds in eachindex(all_vectors)[2:end] 
+        X = hcat(X,all_vectors[ds][1])
+        y = hcat(y,all_vectors[ds][2])
+    end
+
+    return X,y
 end
 
-function run_iterations(initial_config,alpha_config,data_area,model_type,dopf_method,primal_map,dual_map,initial_iters)
-    flag_convergence = false
-    #We want to store the 2-norm of primal and dual residuals
-    #at each iteration
-    areas_id = get_areas_id(data_area)
-    iteration = 1 
-    optimizer = optimizer_with_attributes(Ipopt.Optimizer, "print_level" => 0)
-
-    #data_area = perturb_loads(data_area)
-
-    while iteration < max_iteration && !flag_convergence
-        # overwrite any changes the adaptive algorithm made to alphas in last iteration 
-        if iteration >= initial_iters 
-            for area in areas_id 
-                data_area[area]["alpha"] = deepcopy(alpha_config[area])
-            end
+function gen_dataset(n_runs,n_iters,data,alpha_config,primal_map,dual_map,nn_primal,nn_dual)
+    all_vectors = @distributed (append!) for i = 1:n_runs 
+        data_area,load_vector = get_perturbed_data_area(deepcopy(data),model_type,dopf_method,tol,du_tol,max_iteration,load_map)
+        primal_out = nn_primal(load_vector)
+        dual_out = nn_dual(load_vector)
+        data_area = warm_start(data_area,primal_map,dual_map,vcat(primal_out,dual_out))
+        if mod(i,100) == 1
+            print_level = true 
         else
-            for area in areas_id 
-                data_area[area]["alpha"] = deepcopy(initial_config[area])
-            end
+            print_level = false 
         end
-
-        #info = @capture_out begin
-        for area in areas_id 
-            dr = solve_pmada_model(data_area[area], model_type, optimizer, dopf_method.build_method, solution_processors=dopf_method.post_processors)
-            update_data!(data_area[area], dr["solution"]) 
-        end
-        #end
-
-
-        # share solution with neighbors, the shared data is first obtained to facilitate distributed implementation
-        for area in areas_id # sender subsystem
-            for neighbor in data_area[area]["neighbors"] # receiver subsystem
-                shared_data = prepare_shared_data(data_area[area], neighbor)
-                receive_shared_data!(data_area[neighbor], deepcopy(shared_data), area)
-            end
-        end
-
-    
-        # calculate mismatches and update convergence flags
-        Threads.@threads for area in areas_id
-            dopf_method.update_method(data_area[area])
-        end
-
-
-        # check global convergence and update iteration counters
-        flag_convergence = update_global_flag_convergence(data_area)
-
-        # print solution
-        if mod(iteration, 10) == 1
-            #print_iteration(data_area, print_level, [info])
-            pri_resid = sqrt(sum(data_area[area]["mismatch"][string(area)]^2 for area in areas_id))
-            du_resid = sqrt(sum(data_area[area]["dual_residual"][string(area)]^2 for area in areas_id))
-            println("Iteration: ", iteration, "   pri: ", pri_resid, "  du: ", du_resid)
-        end
-
-        iteration += 1
+        vars_vector,pri_resid,du_resid = run_iterations(alpha_config,data_area,model_type,dopf_method,primal_map,dual_map,n_iters,print_level)
+        [(load_vector,vars_vector)]
     end
 
-    n_shared = sum(1 for area in areas_id for n in keys(data_area[area]["shared_variable"]) for v in keys(data_area[area]["shared_variable"][n]) for k in keys(data_area[area]["shared_variable"][n][v]))
-
-    train_vector = zeros(2*n_shared,1)
-    for area in areas_id 
-        for n in keys(data_area[area]["shared_variable"])
-            for v in keys(data_area[area]["shared_variable"][n])
-                for k in keys(data_area[area]["shared_variable"][n][v])
-                    train_vector[primal_map[area][n][v][k]] = data_area[area]["shared_variable"][n][v][k] 
-                    train_vector[dual_map[area][n][v][k]] = data_area[area]["dual_variable"][n][v][k] 
-                end
-            end
-        end
+    X = all_vectors[1][1]
+    y = all_vectors[1][2]
+    for ds in eachindex(all_vectors)[2:end] 
+        X = hcat(X,all_vectors[ds][1])
+        y = hcat(y,all_vectors[ds][2])
     end
 
-    return train_vector, iteration  
-end 
-
-function run_iterations_track_resid(initial_config,alpha_config,data_area,model_type,dopf_method,primal_map,dual_map,initial_iters)
-    flag_convergence = false
-    #We want to store the 2-norm of primal and dual residuals
-    #at each iteration
-    areas_id = get_areas_id(data_area)
-    iteration = 1 
-    optimizer = optimizer_with_attributes(Ipopt.Optimizer, "print_level" => 0)
-    resid = Dict("primal" => [], "dual" => [])
-    #data_area = perturb_loads(data_area)
-
-    while iteration < max_iteration && !flag_convergence
-        # overwrite any changes the adaptive algorithm made to alphas in last iteration 
-        if iteration >= initial_iters 
-            for area in areas_id 
-                data_area[area]["alpha"] = deepcopy(alpha_config[area])
-            end
-        else
-            for area in areas_id 
-                data_area[area]["alpha"] = deepcopy(initial_config[area])
-            end
-        end
-
-        if haskey(data_area[1]["mismatch"], "2")
-            println("1  ", data_area[1]["mismatch"]["2"]["va"]["24"])
-        end
-
-        #info = @capture_out begin
-        for area in areas_id 
-            dr = solve_pmada_model(data_area[area], model_type, optimizer, dopf_method.build_method, solution_processors=dopf_method.post_processors)
-            update_data!(data_area[area], dr["solution"]) 
-        end
-        #end
-
-        if haskey(data_area[1]["mismatch"], "2")
-            println("2  ", data_area[1]["mismatch"]["2"]["va"]["24"])
-        end
-        # share solution with neighbors, the shared data is first obtained to facilitate distributed implementation
-        for area in areas_id # sender subsystem
-            for neighbor in data_area[area]["neighbors"] # receiver subsystem
-                shared_data = prepare_shared_data(data_area[area], neighbor)
-                receive_shared_data!(data_area[neighbor], deepcopy(shared_data), area)
-            end
-        end
-
-        if haskey(data_area[1]["mismatch"], "2")
-            println("3  ", data_area[1]["mismatch"]["2"]["va"]["24"])
-        end
-    
-        # calculate mismatches and update convergence flags
-        Threads.@threads for area in areas_id
-            dopf_method.update_method(data_area[area])
-        end
-
-        if haskey(data_area[1]["mismatch"], "2")
-            println("4  ", data_area[1]["mismatch"]["2"]["va"]["24"])
-        end
-        # check global convergence and update iteration counters
-        flag_convergence = update_global_flag_convergence(data_area)
-        push!(resid["primal"],sqrt(sum(data_area[area]["mismatch"][string(area)]^2 for area in areas_id)))
-        push!(resid["dual"],sqrt(sum(data_area[area]["dual_residual"][string(area)]^2 for area in areas_id)))
-
-        # print solution
-        if mod(iteration, 10) == 1
-            #print_iteration(data_area, print_level, [info])
-            pri_resid = sqrt(sum(data_area[area]["mismatch"][string(area)]^2 for area in areas_id))
-            du_resid = sqrt(sum(data_area[area]["dual_residual"][string(area)]^2 for area in areas_id))
-            println("Iteration: ", iteration, "   pri: ", pri_resid, "  du: ", du_resid)
-        end
-
-        iteration += 1
-    end
-
-    n_shared = sum(1 for area in areas_id for n in keys(data_area[area]["shared_variable"]) for v in keys(data_area[area]["shared_variable"][n]) for k in keys(data_area[area]["shared_variable"][n][v]))
-
-    train_vector = zeros(2*n_shared,1)
-    for area in areas_id 
-        for n in keys(data_area[area]["shared_variable"])
-            for v in keys(data_area[area]["shared_variable"][n])
-                for k in keys(data_area[area]["shared_variable"][n][v])
-                    train_vector[primal_map[area][n][v][k]] = data_area[area]["shared_variable"][n][v][k] 
-                    train_vector[dual_map[area][n][v][k]] = data_area[area]["dual_variable"][n][v][k] 
-                end
-            end
-        end
-    end
-
-    return train_vector, iteration, resid  
-end 
+    return X,y
+end
 
 function get_hyperparameter_configuration(data_area,pq_bounds,vt_bounds)
     alpha_config = Dict(area_id => deepcopy(data_area[area_id]["alpha"]) for area_id in keys(data_area)) 

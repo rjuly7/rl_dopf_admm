@@ -12,6 +12,9 @@ using Plots
 using Statistics
 using Random 
 using StatsBase 
+using Ipopt 
+using PowerModels 
+using PowerModelsADA 
 using BSON 
 using BSON: @save 
 include("$path/src/little_experiment/data_collection.jl")
@@ -22,7 +25,8 @@ casename = "case118_3"
 nn_num = 1
 number_epochs = 3
 batchsize = 4000
-
+need_csv = 0
+n_areas = 3
 println(ARGS)
 
 if lastindex(ARGS) >= 4
@@ -44,35 +48,25 @@ initial_iters = 20
 
 trainsize = 0.9 
 
-file_list = readdir("$path/data/little_experiment")
-relevant_idcs = findall(x -> contains(x, "$casename"*"_dataset"), file_list)
-dataset_list = file_list[relevant_idcs]
-filenames = Vector{String}(undef, length(dataset_list))
-for n in eachindex(dataset_list)
-    filenames[n] = "$path/data/little_experiment/"*dataset_list[n]
-end   
-
-Xtrain, ytrain, Xtest, ytest = get_dataset(filenames,trainsize)
-
-println(size(Xtrain))
-
-n_in = length(axes(Xtrain,1))
-n_out = length(axes(ytrain,1))
-n_mid = n_in*2 
-
-nn_primal = BSON.load("$path/data/little_experiment/$casename"*"_nn$nn_num"*"_primal.bson")[:nn]
-nn_dual = BSON.load("$path/data/little_experiment/$casename"*"_nn$nn_num"*"_dual.bson")[:nn]
-data_area = get_perturbed_data_area(deepcopy(data))
-
-alpha_pq = 400
-alpha_vt = 4000 
-initial_config = set_hyperparameter_configuration(data_area,alpha_pq,alpha_vt)
 maps = BSON.load("data/little_experiment/$casename"*"_maps.bson")
 primal_map = maps["primal"]
 dual_map = maps["dual"]
 load_map = maps["load"]
 
-n_repeat = 100
+nn_primal = BSON.load("$path/data/little_experiment/$casename"*"_nn$nn_num"*"_primal.bson")[:nn]
+nn_dual = BSON.load("$path/data/little_experiment/$casename"*"_nn$nn_num"*"_dual.bson")[:nn]
+model_type = ACPPowerModel
+dopf_method = adaptive_admm_methods
+tol = 1e-4 
+du_tol = 0.1 
+max_iteration = 600
+data_area,load_vector = get_perturbed_data_area(deepcopy(data),model_type,dopf_method,tol,du_tol,max_iteration,load_map)
+
+alpha_pq = 400
+alpha_vt = 4000 
+initial_config = set_hyperparameter_configuration(data_area,alpha_pq,alpha_vt)
+
+n_repeat = 3
 #n_iters_repeat = @distributed (append!) for repeat=1:n_repeat 
 n_iters_repeat = []
 n_iters_repeat_p = Dict("1" => [], "2" => [], "3" => [])
@@ -118,4 +112,13 @@ for i=1:n_repeat
     end
 end
 
-bson("$path/data/little_experiment/$casename"*"_convresults.jl", Dict("n_iters_repeat" => n_iters_repeat, "n_iters_repeat_p" => n_iters_repeat_p))
+bson("$path/data/little_experiment/$casename"*"_convresults.bson", Dict("n_iters_repeat" => n_iters_repeat, "n_iters_repeat_p" => n_iters_repeat_p))
+
+stuff = BSON.load("$path/data/little_experiment/case118_3_convresults.jl")
+n = stuff["n_iters_repeat"]
+np = stuff["n_iters_repeat_p"]
+
+plot([n,np["1"],np["2"],np["3"]],label=["nn" "p1" "p2" "p3"])
+
+plot([n,np["3"]],label=["nn" "p3"])
+
