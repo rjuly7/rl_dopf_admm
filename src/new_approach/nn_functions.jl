@@ -96,7 +96,7 @@ function train_primal(n_epochs, casename, batchsize, adp)
     n_out = length(axes(ytrain,1))
     n_mid = n_in*2 
 
-    model = Chain(Dense(n_in,n_mid,relu), Dense(n_mid,n_mid,relu), Dense(n_mid,n_mid,relu), Dense(n_mid,n_out,identity))
+    model = Chain(Dense(n_in,n_mid,relu), Dense(n_mid,n_mid,relu), Dense(n_mid,n_mid,relu), Dense(n_mid,n_mid,relu), Dense(n_mid,n_out,identity))
 
     opt = ADAM(adp)  
     loss_tr = Vector{Float32}()
@@ -184,7 +184,7 @@ function train_dual(n_epochs, casename, batchsize, adp)
     n_out = length(axes(ytrain,1))
     n_mid = n_in*2 
 
-    model = Chain(Dense(n_in,n_mid,relu), Dense(n_mid,n_mid,relu), Dense(n_mid,n_mid,relu), Dense(n_mid,n_out,identity))
+    model = Chain(Dense(n_in,n_mid,relu), Dense(n_mid,n_mid,relu), Dense(n_mid,n_mid,relu), Dense(n_mid,n_mid,relu), Dense(n_mid,n_out,identity))
 
     opt = ADAM(adp)  
     loss_tr = Vector{Float32}()

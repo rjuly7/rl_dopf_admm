@@ -67,8 +67,7 @@ function run_iterations(alpha_config,data_area,model_type,dopf_method,primal_map
     iteration = 1 
     optimizer = optimizer_with_attributes(Ipopt.Optimizer, "print_level" => 0)
 
-    #while iteration < max_iteration && !flag_convergence
-    for iteration=1:n_iters 
+    while iteration < n_iters && !flag_convergence
         # overwrite any changes the adaptive algorithm made to alphas in last iteration 
         for area in areas_id 
             data_area[area]["alpha"] = deepcopy(alpha_config[area])
@@ -106,6 +105,8 @@ function run_iterations(alpha_config,data_area,model_type,dopf_method,primal_map
             du_resid = sqrt(sum(data_area[area]["dual_residual"][string(area)]^2 for area in areas_id))
             println("Iteration: ", iteration, "   pri: ", pri_resid, "  du: ", du_resid)
         end
+
+        iteration += 1
     end
 
     n_shared = sum(1 for area in areas_id for n in keys(data_area[area]["shared_variable"]) for v in keys(data_area[area]["shared_variable"][n]) for k in keys(data_area[area]["shared_variable"][n][v]))
@@ -131,7 +132,12 @@ end
 function gen_dataset(n_runs,n_iters,data,alpha_config)
     all_vectors = @distributed (append!) for i = 1:n_runs 
         data_area,load_vector = get_perturbed_data_area(deepcopy(data),model_type,dopf_method,tol,du_tol,max_iteration,load_map)
-        vars_vector,pri_resid,du_resid = run_iterations(alpha_config,data_area,model_type,dopf_method,primal_map,dual_map,n_iters)
+        if mod(i,100) == 1
+            print_level = true 
+        else
+            print_level = false 
+        end
+        vars_vector,pri_resid,du_resid = run_iterations(alpha_config,data_area,model_type,dopf_method,primal_map,dual_map,n_iters,print_level)
         [(load_vector,vars_vector)]
     end
 
