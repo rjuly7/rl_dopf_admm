@@ -58,17 +58,23 @@ function run_admm_2lvl_iterations(data_area::Dict{Int64, <:Any}, model_type::Dat
             dopf_method.update_method1(data_area[area])
         end
 
+        dopf_method.global_outer_update!(data_area)
+
         # print solution
         print_iteration(data_area, print_level, [info])
-        if mod(iteration, 10) == 1 && print_level == 1
+        #if mod(iteration, 10) == 1 && print_level == 1
+        if print_level == 1
+            pri_resid_inner = sqrt(sum(data_area[area]["inner_mismatch"][string(area)]^2 for area in areas_id))
+            du_resid_inner = sqrt(sum(data_area[area]["inner_dual_residual"][string(area)]^2 for area in areas_id))
             #print_iteration(data_area, print_level, [info])
             pri_resid = sqrt(sum(data_area[area]["mismatch"][string(area)]^2 for area in areas_id))
             du_resid = sqrt(sum(data_area[area]["dual_residual"][string(area)]^2 for area in areas_id))
-            println("Iteration: ", iteration, "   pri: ", pri_resid, "  du: ", du_resid)
+            println("Iteration: ", iteration, "    pri: ", pri_resid, "   du: ", du_resid,  "   pri_inner: $pri_resid_inner   du_inner: $du_resid_inner")
         end
 
         # check global convergence and update iteration counters
         flag_convergence = update_global_flag_convergence(data_area)
+
         iteration += 1
 
     end

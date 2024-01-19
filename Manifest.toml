@@ -1097,7 +1097,7 @@ version = "0.19.9"
 
 [[deps.PowerModelsADA]]
 deps = ["DelimitedFiles", "Distributed", "InfrastructureModels", "JuMP", "LinearAlgebra", "PowerModels", "Serialization", "SparseArrays", "Suppressor"]
-git-tree-sha1 = "1b4ce3c83cc3946f34782ffbeb2248009e260cba"
+path = "C:\\Users\\User\\.julia\\dev\\PowerModelsADA"
 uuid = "bf5a6c5f-0285-47d6-bb57-79927775d05d"
 version = "0.1.4"
 
@@ -1754,9 +1754,9 @@ version = "1.18.0+0"
 
 [[deps.libpng_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Zlib_jll"]
-git-tree-sha1 = "94d180a6d2b5e55e447e2d27a29ed04fe79eb30c"
+git-tree-sha1 = "f7c281e9c61905521993a987d38b5ab1d4b53bef"
 uuid = "b53b4c65-9356-5827-b1ea-8c7a1a84506f"
-version = "1.6.38+0"
+version = "1.6.38+1"
 
 [[deps.libvorbis_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Ogg_jll", "Pkg"]
