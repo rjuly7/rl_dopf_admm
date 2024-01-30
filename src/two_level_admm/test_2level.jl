@@ -1,9 +1,31 @@
-using Pkg
-Pkg.activate(".")
+using Distributed 
+addprocs(4)
+@everywhere path = "C:/Users/User/Documents/rl_dopf_admm"
+#@everywhere path = "/storage/scratch1/8/rharris94/rl_dopf_admm"
+@everywhere using Pkg
+@everywhere Pkg.activate(path)
 
-using PowerModelsADA 
-using Ipopt 
-include("dopf_solve_steps.jl")
+@everywhere using PowerModelsADA 
+@everywhere using Ipopt 
+include("$path/src/two_level_admm/dopf_solve_steps.jl")
+
+casename = "pglib_opf_case588_sdet_8"
+data = parse_file("$path/data/$casename.m")
+n_areas = 8
+need_csv = 0
+if (need_csv == 1)
+    partition_path= "$path/data/$casename"*"_$n_areas.csv"
+    assign_area!(data, partition_path)
+end
+
+model_type = ACPPowerModel
+dopf_method = admm_2lvl_methods 
+optimizer = optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0)
+
+t2 = @elapsed data_area_2lvl =  solve_admm_2lvl_iterations_dist(data, model_type, optimizer, dopf_method; max_iteration=10000, print_level=1, multiprocessors=false, tol=1e-4, tol_dual=1, tol_dual_inner=1e-8, alpha=2000, termination_measure="mismatch_dual_residual")
+tn = @elapsed data_area = solve_admm_iterations_dist(data, ACPPowerModel, Ipopt.Optimizer, admm_methods; max_iteration=10000, print_level=1, multiprocessors=false, tol=1e-4, tol_dual=1, alpha=2000, termination_masure="mismatch_dual_residual")
+
+bson("$path/data/two_level/compare_conv_$casename.bson", Dict("2lvl" => data_area_2lvl, "norm" => data_area, "t2" => t2, "tn" => tn))
 
 casename = "pglib_opf_case500_goc_8"
 data = parse_file("data/$casename.m")
@@ -14,16 +36,38 @@ if (need_csv == 1)
     assign_area!(data, partition_path)
 end
 
-model_type = ACPPowerModel
-dopf_method = admm_2lvl_methods 
-optimizer = Ipopt.Optimizer 
+t2 = @elapsed data_area_2lvl =  solve_admm_2lvl_iterations_dist(data, model_type, optimizer, dopf_method; max_iteration=10000, print_level=1, multiprocessors=false, tol=1e-4, tol_dual=1, tol_dual_inner=1e-8, alpha=2000, termination_measure="mismatch_dual_residual")
+tn = @elapsed data_area = solve_admm_iterations_dist(data, ACPPowerModel, Ipopt.Optimizer, admm_methods; max_iteration=10000, print_level=1, multiprocessors=false, tol=1e-4, tol_dual=1, alpha=2000, termination_masure="mismatch_dual_residual")
 
-#data_area =  solve_admm_2lvl_iterations(data, model_type, optimizer, dopf_method; max_iteration=4000, print_level=1, multiprocessors=false, tol=1e-4, tol_dual=0.1, tol_dual_inner=1e-8, alpha=1000, termination_measure="mismatch_dual_residual")
-data_area = solve_dopf(data, ACPPowerModel, Ipopt.Optimizer, admm_methods; max_iteration=4000, print_level=1, multiprocessors=false, tol=1e-4, tol_dual=0.1, alpha=1000, termination_masure="mismatch_dual_residual")
+bson("$path/data/two_level/compare_conv_$casename.bson", Dict("2lvl" => data_area_2lvl, "norm" => data_area, "t2" => t2, "tn" => tn))
 
-println("Difference: ", compare_solution(data, data_area, ACPPowerModel, Ipopt.Optimizer), "%")
+casename = "pglib_opf_case793_goc_10"
+data = parse_file("data/$casename.m")
+n_areas = 8
+need_csv = 0
+if (need_csv == 1)
+    partition_path= "data/$casename"*"_$n_areas.csv"
+    assign_area!(data, partition_path)
+end
 
+t2 = @elapsed data_area_2lvl =  solve_admm_2lvl_iterations_dist(data, model_type, optimizer, dopf_method; max_iteration=10000, print_level=1, multiprocessors=false, tol=1e-4, tol_dual=1, tol_dual_inner=1e-8, alpha=2000, termination_measure="mismatch_dual_residual")
+tn = @elapsed data_area = solve_admm_iterations_dist(data, ACPPowerModel, Ipopt.Optimizer, admm_methods; max_iteration=10000, print_level=1, multiprocessors=false, tol=1e-4, tol_dual=1, alpha=2000, termination_masure="mismatch_dual_residual")
 
+bson("$path/data/two_level/compare_conv_$casename.bson", Dict("2lvl" => data_area_2lvl, "norm" => data_area, "t2" => t2, "tn" => tn))
+
+casename = "pglib_opf_case2868_rte_20"
+data = parse_file("data/$casename.m")
+n_areas = 20
+need_csv = 0
+if (need_csv == 1)
+    partition_path= "data/$casename"*"_$n_areas.csv"
+    assign_area!(data, partition_path)
+end
+
+t2 = @elapsed data_area_2lvl =  solve_admm_2lvl_iterations_dist(data, model_type, optimizer, dopf_method; max_iteration=10000, print_level=1, multiprocessors=false, tol=1e-4, tol_dual=1, tol_dual_inner=1e-8, alpha=2000, termination_measure="mismatch_dual_residual")
+tn = @elapsed data_area = solve_admm_iterations_dist(data, ACPPowerModel, Ipopt.Optimizer, admm_methods; max_iteration=10000, print_level=1, multiprocessors=false, tol=1e-4, tol_dual=1, alpha=2000, termination_masure="mismatch_dual_residual")
+
+bson("$path/data/two_level/compare_conv_$casename.bson", Dict("2lvl" => data_area_2lvl, "norm" => data_area, "t2" => t2, "tn" => tn))
 
 
 # casename = "case14"
