@@ -1,4 +1,4 @@
-function get_iterations(data_area,alpha_config,initial_config,optimizer,initial_iters)
+function run_then_return_val_loss_sp(data_area::Dict{Int64, <:Any},linucb_agents,optimizer)
     dopf_method = adaptive_admm_methods
     model_type = ACPPowerModel
     flag_convergence = false
@@ -6,28 +6,36 @@ function get_iterations(data_area,alpha_config,initial_config,optimizer,initial_
     #at each iteration
     areas_id = get_areas_id(data_area)
     iteration = 1 
-    max_iteration = 1000
+    max_iteration = first(data_area)[2]["option"]["max_iteration"]
+
+    region_bounds = first(linucb_agents)[2]["region_bounds"]
+    flag_bounds = Dict(n => false for n in keys(linucb_agents))
+    rewards = Dict(n => 0 for n in keys(linucb_agents))
+    flag_keys = sort!(collect(keys(flag_bounds)))
+
     #data_area = perturb_loads(data_area)
 
-    while iteration < max_iteration && !flag_convergence
+    while iteration < max_iteration && !flag_bounds[flag_keys[end]]
         # overwrite any changes the adaptive algorithm made to alphas in last iteration 
-        if iteration >= initial_iters 
+        if iteration == 1 
+            alpha_config = linucb_agents[1]["alpha_config"]
             for area in areas_id 
                 data_area[area]["alpha"] = deepcopy(alpha_config[area])
             end
         else
-            for area in areas_id 
-                data_area[area]["alpha"] = deepcopy(initial_config[area])
+            false_flags = [i for i in keys(flag_bounds) if flag_bounds[i] == false]
+            sort!(false_flags)
+            n_agent = false_flags[1]
+            alpha_config = linucb_agents[n_agent]["alpha_config"]
+            for area in areas_id  
+                data_area[area]["alpha"] = deepcopy(alpha_config[area])
             end
         end
-            
 
-        #info = @capture_out begin
-        for area in areas_id
-            result = solve_pmada_model(data_area[area], model_type, optimizer, dopf_method.build_method, solution_processors=dopf_method.post_processors)
-            update_data!(data_area[area], result["solution"])
+        for area in areas_id 
+            dr = solve_pmada_model(data_area[area], model_type, optimizer, dopf_method.build_method, solution_processors=dopf_method.post_processors)
+            update_data!(data_area[area], dr["solution"])        
         end
-        #end
 
         # share solution with neighbors, the shared data is first obtained to facilitate distributed implementation
         for area in areas_id # sender subsystem
@@ -44,32 +52,43 @@ function get_iterations(data_area,alpha_config,initial_config,optimizer,initial_
         end
 
         # check global convergence and update iteration counters
-        flag_convergence = update_global_flag_convergence(data_area)
+        #flag_convergence = update_global_flag_convergence(data_area)
+        pri_resid = sqrt(sum(data_area[area]["mismatch"][string(area)]^2 for area in areas_id))
+        du_resid = sqrt(sum(data_area[area]["dual_residual"][string(area)]^2 for area in areas_id))
+        for n in keys(flag_bounds)
+            if flag_bounds[n] == false 
+                if pri_resid <= region_bounds[n][1] && du_resid <= region_bounds[n][2]
+                    flag_bounds[n] = true 
+                    if n == 1
+                        rewards[n] = - iteration 
+                    else
+                        rewards[n] = - (iteration + rewards[n-1])
+                    end 
+                    println("Flag bounds $n reward ", rewards[n])
+                end
+            end
+        end
 
-        print_level = 1
-        # print solution
-        if mod(iteration, 20) == 1
-            print_iteration(data_area, print_level, [info])
-            pri_resid = sqrt(sum(data_area[area]["mismatch"][string(area)]^2 for area in areas_id))
-            du_resid = sqrt(sum(data_area[area]["dual_residual"][string(area)]^2 for area in areas_id))
+        if mod(iteration, 10) == 1
+            #print_iteration(data_area, print_level, [info])
             println("Iteration: ", iteration, "   pri: ", pri_resid, "  du: ", du_resid)
         end
 
         iteration += 1
     end
 
-    return iteration 
+    return rewards 
 end
 
-function perturb_loads(data)
+function perturb_loads(data_orig)
     model_type = ACPPowerModel
     dopf_method = adaptive_admm_methods 
     tol = 1e-4 
     du_tol = 0.1 
     max_iteration = 1000
-    data_orig = deepcopy(data)
+    data = deepcopy(data_orig)
     for (i,load) in data_orig["load"]
-        r = rand() - 0.4
+        r = rand() - 0.5
         data["load"][i]["pd"] = load["pd"]*(1+r)
         data["load"][i]["qd"] = load["qd"]*(1+r)
     end

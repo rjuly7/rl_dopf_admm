@@ -133,6 +133,7 @@ function run_then_return_val_loss_sp(data_area::Dict{Int64, <:Any},linucb_agents
     flag_bounds = Dict(n => false for n in keys(linucb_agents))
     rewards = Dict(n => 0 for n in keys(linucb_agents))
     flag_keys = sort!(collect(keys(flag_bounds)))
+    bound_iter_counts = Dict(n => 0 for n in  keys(linucb_agents))
 
     #data_area = perturb_loads(data_area)
 
@@ -180,7 +181,12 @@ function run_then_return_val_loss_sp(data_area::Dict{Int64, <:Any},linucb_agents
             if flag_bounds[n] == false 
                 if pri_resid <= region_bounds[n][1] && du_resid <= region_bounds[n][2]
                     flag_bounds[n] = true 
-                    rewards[n] = - iteration 
+                    bound_iter_counts[n] = iteration 
+                    if n == 1
+                        rewards[n] = - iteration 
+                    else
+                        rewards[n] = - (iteration - bound_iter_counts[n-1])
+                    end                     
                     println("Flag bounds $n reward ", rewards[n])
                 end
             end
@@ -525,7 +531,7 @@ function run_linucb(T,data_area,data,pq_bounds,vt_bounds,optimizer,lambda;
     for i=1:T 
         data_area = get_perturbed_data_area(deepcopy(data))
         rewards = run_then_return_val_loss_sp(data_area,linucb_agents,optimizer)
-        for n=1:n_agents 
+        for n in keys(linucb_agents)
             reward = rewards[n]
             push!(linucb_agents[n]["trace_params"]["reward"], reward)
             la = linucb_agents[n]
