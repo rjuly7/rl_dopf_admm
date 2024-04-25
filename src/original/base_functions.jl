@@ -251,6 +251,89 @@ function run_to_end(data_area::Dict{Int,Any}, Q, pq_action_set, vt_action_set, a
     return data_area, state_trace, alpha_trace 
 end
 
+function run_and_record(data_area::Dict{Int,Any}, Q, pq_action_set, vt_action_set, alpha_pq, alpha_vt, n_history, update_alpha_freq;
+    dopf_method=adaptive_admm_methods, model_type=ACPPowerModel, optimizer=Ipopt.Optimizer, max_iteration=1000)
+    flag_convergence = false
+    #We want to store the 2-norm of primal and dual residuals
+    #at each iteration
+    areas_id = get_areas_id(data_area)  
+    alphas = Dict(i => Dict("pq" => alpha_pq, "vt" => alpha_vt) for i in areas_id)
+    agent_residual_data = Dict(i => Dict("primal" => [], "dual" => []) for i in areas_id)
+    iteration = 1 
+    reward_residual_data = Dict("primal" => [], "dual" => []) 
+    state_trace = Dict(i => [] for i in areas_id)
+    alpha_trace = Dict(i => [] for i in areas_id)
+    while iteration < max_iteration && !flag_convergence
+
+        if mod(iteration-n_history-1,update_alpha_freq) == 0 && iteration >= n_history 
+            for area in areas_id 
+                state = vcat(sigmoid_norm_primal(agent_residual_data[area]["primal"][end-n_history+1:end]),sigmoid_norm_dual(agent_residual_data[area]["dual"][end-n_history+1:end]))
+                push!(state_trace[area],deepcopy(state))
+                a = argmax(Q(state))
+                n_actions_vt = length(vt_action_set)
+                pq_idx = Int(ceil(a/n_actions_vt))
+                vt_idx = a - (pq_idx-1)*n_actions_vt 
+                alphas[area]["pq"] = pq_action_set[pq_idx]
+                alphas[area]["vt"] = vt_action_set[vt_idx]
+                push!(alpha_trace[area], Dict("pq" => alphas[area]["pq"], "vt" => alphas[area]["vt"]))
+                println("a: ", a)
+                println("pq: ", alphas[area]["pq"])
+                println("vt: ", alphas[area]["vt"])
+            end
+        end
+
+        for area in areas_id
+            assign_alpha!(data_area[area], alphas[area]["pq"], alphas[area]["vt"])
+        end
+
+        # solve local problem and update solution
+        info = @capture_out begin
+            for area in areas_id
+                result = solve_pmada_model(data_area[area], model_type, optimizer, dopf_method.build_method, solution_processors=dopf_method.post_processors)
+                update_data!(data_area[area], result["solution"])
+            end
+        end
+
+        println(data_area[1]["alpha"]["2"]["qf"]["109"])
+        println(data_area[1]["alpha"]["2"]["va"]["24"])
+
+        # share solution with neighbors, the shared data is first obtained to facilitate distributed implementation
+        for area in areas_id # sender subsystem
+            for neighbor in data_area[area]["neighbors"] # receiver subsystem
+                shared_data = prepare_shared_data(data_area[area], neighbor)
+                receive_shared_data!(data_area[neighbor], deepcopy(shared_data), area)
+            end
+        end
+
+        # calculate mismatches and update convergence flags
+        Threads.@threads for area in areas_id
+            dopf_method.update_method(data_area[area])
+            save_solution!(data_area[area])
+        end
+
+        push!(reward_residual_data["dual"], sqrt(sum(data_area[area]["dual_residual"][string(area)]^2 for area in areas_id)))
+        push!(reward_residual_data["primal"], sqrt(sum(data_area[area]["mismatch"][string(area)]^2 for area in areas_id)))
+
+        #Record the residuals 
+        for area in areas_id
+            push!(agent_residual_data[area]["dual"], data_area[area]["dual_residual"][string(area)])
+            push!(agent_residual_data[area]["primal"], data_area[area]["mismatch"][string(area)])
+        end        
+
+        # check global convergence and update iteration counters
+        flag_convergence = update_global_flag_convergence(data_area)
+
+        print_level = 1
+        # print solution
+        print_iteration(data_area, print_level, [info])
+        println("pri: ", reward_residual_data["primal"][end], "  du: ", reward_residual_data["dual"][end])
+        println()
+        iteration += 1
+    end
+
+    return data_area, state_trace, alpha_trace, agent_residual_data 
+end
+
 function quick_adaptive_test(data;
     dopf_method=adaptive_admm_methods, model_type=ACPPowerModel, optimizer=Ipopt.Optimizer, max_iteration=1000, tol=1e-4) 
     
