@@ -6,7 +6,6 @@ using LinearAlgebra
 using PowerModelsADA 
 using PowerModels
 using JuMP 
-using Gurobi 
 using Ipopt 
 using BSON 
 using Random 
@@ -29,9 +28,6 @@ data_area = initialize_dopf(data, model_type, dopf_method, max_iteration, tol, d
 pq_bounds = [200,800]
 vt_bounds = [3000,5000]
 
-alpha_pq = 400
-alpha_vt = 4000 
-initial_config = set_hyperparameter_configuration(data_area,alpha_pq,alpha_vt)
 lambda = 0.1
 
 T = 2

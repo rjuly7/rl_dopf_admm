@@ -516,7 +516,7 @@ function initialize_lin_ucb(pq_bounds,vt_bounds,region_bounds,data_area, lambda)
 end
 
 function run_linucb(T,data_area,data,pq_bounds,vt_bounds,optimizer,lambda;
-                        region_bounds=[(0.01,10),(0.001,1),(1e-4,0.1)])
+                        region_bounds=[(0.01,20),(0.001,1),(1e-4,0.1)])
     linucb_agents = Dict{Int,Any}()
     for n in eachindex(region_bounds)
         linucb_agents[n] = initialize_lin_ucb(pq_bounds, vt_bounds, region_bounds, data_area, lambda)
