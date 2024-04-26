@@ -1,4 +1,33 @@
-function run_then_return_val_loss_sp(data_area::Dict{Int64, <:Any},linucb_agents,optimizer)
+function get_alpha_configs(linucb_agents)
+    configs = Dict()
+    for n in keys(linucb_agents)
+        V = linucb_agents[n]["V"]
+        inv_V = inv(V)
+        y = linucb_agents[n]["y"]
+        hat_theta = inv_V*y 
+
+        nv = length(linucb_agents[n]["upper_bounds"])
+        T = 500 
+        beta = 1 + sqrt(2*log(T)+nv*log((nv+T)/nv))
+        model = Model(Ipopt.Optimizer)
+        set_optimizer_attribute(model, "print_level", 0)
+        @variable(model, lower_bounds[i] <= a[i=1:nv] <= upper_bounds[i])
+        #@variable(model, u)
+        #@objective(model, Max, dot(hat_theta,a) + sqrt(beta)*u)
+        #@constraint(model, transpose(a)*inv_V*a == u^2)
+        @objective(model, Max, dot(hat_theta,a))
+        optimize!(model)
+        println(termination_status(model))
+
+        
+        alpha_vector = value.(a)
+        alpha_config = vector_to_config(alpha_vector,deepcopy(data_area))
+        configs[n] = alpha_config
+    end
+    return configs 
+end
+
+function run_with_configs(data_area::Dict{Int64, <:Any},configs,optimizer)
     dopf_method = adaptive_admm_methods
     model_type = ACPPowerModel
     flag_convergence = false
@@ -10,7 +39,7 @@ function run_then_return_val_loss_sp(data_area::Dict{Int64, <:Any},linucb_agents
 
     region_bounds = first(linucb_agents)[2]["region_bounds"]
     flag_bounds = Dict(n => false for n in keys(linucb_agents))
-    rewards = Dict(n => 0 for n in keys(linucb_agents))
+    rewards = Dict(n => -1000 for n in keys(linucb_agents))
     flag_keys = sort!(collect(keys(flag_bounds)))
 
     #data_area = perturb_loads(data_area)
@@ -18,7 +47,7 @@ function run_then_return_val_loss_sp(data_area::Dict{Int64, <:Any},linucb_agents
     while iteration < max_iteration && !flag_bounds[flag_keys[end]]
         # overwrite any changes the adaptive algorithm made to alphas in last iteration 
         if iteration == 1 
-            alpha_config = linucb_agents[1]["alpha_config"]
+            alpha_config = configs[1]
             for area in areas_id 
                 data_area[area]["alpha"] = deepcopy(alpha_config[area])
             end
@@ -26,7 +55,8 @@ function run_then_return_val_loss_sp(data_area::Dict{Int64, <:Any},linucb_agents
             false_flags = [i for i in keys(flag_bounds) if flag_bounds[i] == false]
             sort!(false_flags)
             n_agent = false_flags[1]
-            alpha_config = linucb_agents[n_agent]["alpha_config"]
+            println(n_agent)
+            alpha_config = configs[n_agent]
             for area in areas_id  
                 data_area[area]["alpha"] = deepcopy(alpha_config[area])
             end

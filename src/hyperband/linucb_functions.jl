@@ -32,7 +32,7 @@ function run_then_return_val_loss(data_area,alpha_config,initial_config,optimize
     #at each iteration
     areas_id = get_areas_id(data_area)
     iteration = 1 
-    max_iteration = 1000
+    max_iteration = 1200
     #data_area = perturb_loads(data_area)
 
     while iteration < max_iteration && !flag_convergence
@@ -119,7 +119,7 @@ end
 #     return result
 # end
 
-function run_then_return_val_loss_sp(data_area::Dict{Int64, <:Any},linucb_agents,optimizer)
+function run_then_return_val_loss_agent_sp(data_area::Dict{Int64, <:Any},linucb_agent,optimizer,n,initial_config)
     dopf_method = adaptive_admm_methods
     model_type = ACPPowerModel
     flag_convergence = false
@@ -129,28 +129,25 @@ function run_then_return_val_loss_sp(data_area::Dict{Int64, <:Any},linucb_agents
     iteration = 1 
     max_iteration = first(data_area)[2]["option"]["max_iteration"]
 
-    region_bounds = first(linucb_agents)[2]["region_bounds"]
-    flag_bounds = Dict(n => false for n in keys(linucb_agents))
-    rewards = Dict(n => 0 for n in keys(linucb_agents))
-    flag_keys = sort!(collect(keys(flag_bounds)))
-    bound_iter_counts = Dict(n => 0 for n in  keys(linucb_agents))
-
+    region_bounds = linucb_agent["region_bounds"]
+    reward = -1000
+    reached_bound = false 
     #data_area = perturb_loads(data_area)
 
-    while iteration < max_iteration && !flag_bounds[flag_keys[end]]
+    while iteration < max_iteration && !reached_bound
         # overwrite any changes the adaptive algorithm made to alphas in last iteration 
-        if iteration == 1 
-            alpha_config = linucb_agents[1]["alpha_config"]
+        if n == 1 
+            alpha_config = linucb_agent["alpha_config"]
             for area in areas_id 
                 data_area[area]["alpha"] = deepcopy(alpha_config[area])
             end
-        else
-            false_flags = [i for i in keys(flag_bounds) if flag_bounds[i] == false]
-            sort!(false_flags)
-            n_agent = false_flags[1]
-            alpha_config = linucb_agents[n_agent]["alpha_config"]
+        elseif iteration != 1 && pri_resid > region_bounds[n-1][1] && du_resid > region_bounds[n-1][1]
             for area in areas_id  
-                data_area[area]["alpha"] = deepcopy(alpha_config[area])
+                data_area[area]["alpha"] = deepcopy(initial_config[area])
+            end
+        else
+            for area in areas_id 
+                data_area[area]["alpha"] = deepcopy(linucb_agent["alpha_config"][area])
             end
         end
 
@@ -177,30 +174,21 @@ function run_then_return_val_loss_sp(data_area::Dict{Int64, <:Any},linucb_agents
         #flag_convergence = update_global_flag_convergence(data_area)
         pri_resid = sqrt(sum(data_area[area]["mismatch"][string(area)]^2 for area in areas_id))
         du_resid = sqrt(sum(data_area[area]["dual_residual"][string(area)]^2 for area in areas_id))
-        for n in keys(flag_bounds)
-            if flag_bounds[n] == false 
-                if pri_resid <= region_bounds[n][1] && du_resid <= region_bounds[n][2]
-                    flag_bounds[n] = true 
-                    bound_iter_counts[n] = iteration 
-                    if n == 1
-                        rewards[n] = - iteration 
-                    else
-                        rewards[n] = - (iteration - bound_iter_counts[n-1])
-                    end                     
-                    println("Flag bounds $n reward ", rewards[n])
-                end
-            end
+        if pri_resid <= region_bounds[n][1] && du_resid <= region_bounds[n][2]
+            reached_bound = true  
         end
 
         if mod(iteration, 10) == 1
             #print_iteration(data_area, print_level, [info])
-            println("Iteration: ", iteration, "   pri: ", pri_resid, "  du: ", du_resid)
+            println("Agent : $n Iteration: ", iteration, "   pri: ", pri_resid, "  du: ", du_resid)
         end
 
         iteration += 1
     end
+    pri_resid = sqrt(sum(data_area[area]["mismatch"][string(area)]^2 for area in areas_id))
+    du_resid = sqrt(sum(data_area[area]["dual_residual"][string(area)]^2 for area in areas_id))
 
-    return rewards 
+    return -iteration 
 end
 
 
@@ -485,7 +473,7 @@ function get_perturbed_data_area(data)
     dopf_method = adaptive_admm_methods 
     tol = 1e-4 
     du_tol = 0.1 
-    max_iteration = 1000
+    max_iteration = 1200
     data_orig = deepcopy(data)
     for (i,load) in data_orig["load"]
         r = rand() - 0.4
@@ -521,7 +509,7 @@ function initialize_lin_ucb(pq_bounds,vt_bounds,region_bounds,data_area, lambda)
     return linucb_agent
 end
 
-function run_linucb(T,data_area,data,pq_bounds,vt_bounds,optimizer,lambda;
+function run_linucb(T,data_area,data,pq_bounds,vt_bounds,optimizer,lambda,initial_config;
                         region_bounds=[(0.01,20),(0.001,1),(1e-4,0.1)])
     linucb_agents = Dict{Int,Any}()
     for n in eachindex(region_bounds)
@@ -530,10 +518,14 @@ function run_linucb(T,data_area,data,pq_bounds,vt_bounds,optimizer,lambda;
 
     for i=1:T 
         data_area = get_perturbed_data_area(deepcopy(data))
-        rewards = run_then_return_val_loss_sp(data_area,linucb_agents,optimizer)
-        for n in keys(linucb_agents)
-            reward = rewards[n]
+        all_rewards = @distributed (append!) for n=1:length(region_bounds)
+            reward = run_then_return_val_loss_agent_sp(deepcopy(data_area),linucb_agents[n],optimizer,n,initial_config)
+            [(n,reward)]
+        end
+        for (n,reward) in all_rewards
             push!(linucb_agents[n]["trace_params"]["reward"], reward)
+            linucb_agents[n]["reward"] = reward 
+            println("Updating $n reward ", linucb_agents[n]["reward"])
             la = linucb_agents[n]
             alpha_vector,V,y = LinUCB(la["V"],la["alpha_vector"],la["reward"],la["y"],la["beta"],la["nv"],la["lower_bounds"],la["upper_bounds"])
             linucb_agents[n]["alpha_vector"] = alpha_vector 
