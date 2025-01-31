@@ -119,7 +119,7 @@ end
 #     return result
 # end
 
-function run_then_return_val_loss_agent_sp(data_area::Dict{Int64, <:Any},linucb_agent,optimizer,n,initial_config)
+function run_then_return_val_loss_agent_sp(data_area::Dict{Int64, <:Any},linucb_agents,optimizer,N,initial_config)
     dopf_method = adaptive_admm_methods
     model_type = ACPPowerModel
     flag_convergence = false
@@ -129,26 +129,17 @@ function run_then_return_val_loss_agent_sp(data_area::Dict{Int64, <:Any},linucb_
     iteration = 1 
     max_iteration = first(data_area)[2]["option"]["max_iteration"]
 
-    region_bounds = linucb_agent["region_bounds"]
+    region_bounds = linucb_agents[N]["region_bounds"]
     reward = -1000
-    reached_bound = false 
-    #data_area = perturb_loads(data_area)
+    reached_bound = [false for ii=1:N] 
+    reached_bound_iter = [0 for ii=1:N]
+    bound_region = 1
 
-    while iteration < max_iteration && !reached_bound
+    while iteration < max_iteration && !(reached_bound[end])
         # overwrite any changes the adaptive algorithm made to alphas in last iteration 
-        if n == 1 
-            alpha_config = linucb_agent["alpha_config"]
-            for area in areas_id 
-                data_area[area]["alpha"] = deepcopy(alpha_config[area])
-            end
-        elseif iteration != 1 && pri_resid > region_bounds[n-1][1] && du_resid > region_bounds[n-1][1]
-            for area in areas_id  
-                data_area[area]["alpha"] = deepcopy(initial_config[area])
-            end
-        else
-            for area in areas_id 
-                data_area[area]["alpha"] = deepcopy(linucb_agent["alpha_config"][area])
-            end
+        for area in areas_id 
+            #fill in with alphas from linucb_agent in charge of current residual region 
+            data_area[area]["alpha"] = deepcopy(linucb_agents[bound_region]["alpha_config"][area])
         end
 
         for area in areas_id 
@@ -174,13 +165,23 @@ function run_then_return_val_loss_agent_sp(data_area::Dict{Int64, <:Any},linucb_
         #flag_convergence = update_global_flag_convergence(data_area)
         pri_resid = sqrt(sum(data_area[area]["mismatch"][string(area)]^2 for area in areas_id))
         du_resid = sqrt(sum(data_area[area]["dual_residual"][string(area)]^2 for area in areas_id))
-        if pri_resid <= region_bounds[n][1] && du_resid <= region_bounds[n][2]
-            reached_bound = true  
+        # if pri_resid <= region_bounds[n][1] && du_resid <= region_bounds[n][2]
+        #     reached_bound = true  
+        # end
+        for ii=1:N
+            this_bound = region_bounds[ii]
+            if pri_resid <= this_bound[1] && du_resid <= this_bound[2]
+                if reached_bound[ii] == false 
+                    reached_bound_iter[ii] = iteration 
+                end 
+                reached_bound[ii] = true 
+                bound_region = ii+1
+            end
         end
 
-        if mod(iteration, 10) == 1
+        if mod(iteration, 2) == 1
             #print_iteration(data_area, print_level, [info])
-            println("Agent : $n Iteration: ", iteration, "   pri: ", pri_resid, "  du: ", du_resid)
+            println("Agent : $N  bound_region $bound_region Iteration: ", iteration, "   pri: ", pri_resid, "  du: ", du_resid)
         end
 
         iteration += 1
@@ -188,154 +189,13 @@ function run_then_return_val_loss_agent_sp(data_area::Dict{Int64, <:Any},linucb_
     pri_resid = sqrt(sum(data_area[area]["mismatch"][string(area)]^2 for area in areas_id))
     du_resid = sqrt(sum(data_area[area]["dual_residual"][string(area)]^2 for area in areas_id))
 
-    return -iteration 
-end
-
-
-function run_then_return_val_loss_mp(data_area::Dict{Int64, <:Any},alpha_config,initial_config,optimizer,initial_iters)
-    dopf_method = adaptive_admm_methods
-    model_type = ACPPowerModel
-    #We want to store the 2-norm of primal and dual residuals
-    #at each iteration
-
-    # lookup dictionaries for worker-area pairs
-    areas_id = get_areas_id(data_area)
-    worker_id = Distributed.workers()
-    number_workers = length(worker_id)
-
-    k = 1
-    area_worker = Dict()
-    for i in areas_id
-        if k > number_workers
-            k = 1
-        end
-        area_worker[i] = worker_id[k]
-        k += 1 
+    println(reached_bound_iter)
+    if N == 1
+        this_reward = -iteration 
+    else
+        this_reward = -(iteration-reached_bound_iter[N-1])
     end
-    worker_area = Dict([i => findall(x -> x==i, area_worker) for i in worker_id if i in values(area_worker)])
-
-    # initiate communication channels 
-    comms = Dict(0 => Dict(area => Distributed.RemoteChannel(1) for area in areas_id))
-    for area1 in areas_id
-        comms[area1] = Dict()
-        for area2 in [0; areas_id]
-            if area1 != area2 
-                comms[area1][area2] = Distributed.RemoteChannel(area_worker[area1])
-            end
-        end
-    end
-
-    # initilize distributed power model parameters
-    for area in areas_id
-        put!(comms[0][area], data_area[area])
-    end
-
-    # get global parameters
-    max_iteration = first(data_area)[2]["option"]["max_iteration"]
-
-    # initialize the algorithms global counters
-    iteration = 1
-    global_flag_convergence = false
-    global_counters = Dict{Int64, Any}()
-
-    # share global variables
-    Distributed.@everywhere keys(worker_area) begin
-        comms = $comms
-        areas_id = $areas_id
-        worker_area = $worker_area
-        area_worker = $area_worker
-        dopf_method = $dopf_method
-        model_type = $model_type
-        optimizer = $optimizer
-        area_id = worker_area[myid()]
-        data_local = Dict{Int64, Any}(area => take!(comms[0][area]) for area in area_id)
-    end
-
-    # start iteration
-    while iteration <= max_iteration && !global_flag_convergence
-
-        # overwrite any changes the adaptive algorithm made to alphas in last iteration 
-        if iteration >= initial_iters 
-            for area in areas_id 
-                data_area[area]["alpha"] = deepcopy(alpha_config[area])
-            end
-        else
-            for area in areas_id 
-                data_area[area]["alpha"] = deepcopy(initial_config[area])
-            end
-        end
-
-        Distributed.@everywhere keys(worker_area) begin
-            for area in area_id
-                # solve local problem and update solution
-                result = solve_pmada_model(data_local[area], model_type, optimizer, dopf_method.build_method, solution_processors=dopf_method.post_processors)
-                update_data!(data_local[area], result["solution"])
-        
-                # send data to neighboring areas
-                for neighbor in data_local[area]["neighbors"] 
-                    shared_data = prepare_shared_data(data_local[area], neighbor)
-                    put!(comms[area][neighbor], shared_data)
-                end
-            end
-        end
-
-        Distributed.@everywhere keys(worker_area) begin
-            for area in area_id
-                # receive data to neighboring areas
-                for neighbor in data_local[area]["neighbors"] 
-                    received_data = take!(comms[neighbor][area])
-                    receive_shared_data!(data_local[area], received_data, neighbor)
-                end
-
-                # calculate and share mismatches
-                dopf_method.update_method(data_local[area])
-                counters = Dict("option"=> data_local[area]["option"], "counter" => data_local[area]["counter"], "mismatch" => data_local[area]["mismatch"])
-                if data_local[area]["option"]["termination_measure"] in ["dual_residual", "mismatch_dual_residual"]
-                    counters["dual_residual"] = data_local[area]["dual_residual"]
-                end
-                put!(comms[area][0], deepcopy(counters))
-            end
-        end
-
-        # receive the mismatches from areas
-        for area in areas_id
-            counters = take!(comms[area][0])
-            global_counters[area] = counters
-        end
-
-        # print progress
-        if mod(iteration, 10) == 1
-            #print_iteration(data_area, print_level, [info])
-            pri_resid = sqrt(sum(data_area[area]["mismatch"][string(area)]^2 for area in areas_id))
-            du_resid = sqrt(sum(data_area[area]["dual_residual"][string(area)]^2 for area in areas_id))
-            println("Iteration: ", iteration, "   pri: ", pri_resid, "  du: ", du_resid)
-        end    
-
-        # update flag convergence and iteration number
-        global_flag_convergence = update_global_flag_convergence(global_counters)
-        iteration += 1
-    end
-
-    # receive the final solution
-    Distributed.@everywhere keys(worker_area) begin
-        for area in area_id
-            # send the area data
-            put!(comms[area][0], data_local[area])
-        end
-    end
-
-    for area in areas_id
-        data_area[area] = take!(comms[area][0])
-    end
-
-    # close the communication channels
-    for i in keys(comms)
-        for j in keys(comms[i])
-            close(comms[i][j])
-        end
-    end
-
-    return 200 - iteration 
+    return this_reward 
 end
 
 function vector_to_config(alpha_vector,data_area)
@@ -510,32 +370,39 @@ function initialize_lin_ucb(pq_bounds,vt_bounds,region_bounds,data_area, lambda)
 end
 
 function run_linucb(T,data_area,data,pq_bounds,vt_bounds,optimizer,lambda,initial_config;
-                        region_bounds=[(0.01,20),(0.001,1),(1e-4,0.1)])
+                        region_bounds=[(0.01,20),(0.001,1),(1e-4,0.1)],first_region_pq=[300,500],first_region_vt=[3500,4500])
     linucb_agents = Dict{Int,Any}()
     for n in eachindex(region_bounds)
-        linucb_agents[n] = initialize_lin_ucb(pq_bounds, vt_bounds, region_bounds, data_area, lambda)
+        if n == 1
+            linucb_agents[n] = initialize_lin_ucb(first_region_pq, first_region_vt, region_bounds, data_area, lambda)
+        else
+            linucb_agents[n] = initialize_lin_ucb(pq_bounds, vt_bounds, region_bounds, data_area, lambda)
+        end
     end
 
     for i=1:T 
         data_area = get_perturbed_data_area(deepcopy(data))
-        all_rewards = @distributed (append!) for n=1:length(region_bounds)
-            reward = run_then_return_val_loss_agent_sp(deepcopy(data_area),linucb_agents[n],optimizer,n,initial_config)
-            [(n,reward)]
+        all_rewards = @distributed (append!) for N=1:length(region_bounds)
+        #all_rewards = []
+        #for N = 1:length(region_bounds)
+            reward = run_then_return_val_loss_agent_sp(deepcopy(data_area),linucb_agents,optimizer,N,initial_config)
+            #push!(all_rewards,(N,reward))
+            [(N,reward)]
         end
-        for (n,reward) in all_rewards
-            push!(linucb_agents[n]["trace_params"]["reward"], reward)
-            linucb_agents[n]["reward"] = reward 
-            println("Updating $n reward ", linucb_agents[n]["reward"])
-            la = linucb_agents[n]
+        for (N,reward) in all_rewards
+            push!(linucb_agents[N]["trace_params"]["reward"], reward)
+            linucb_agents[N]["reward"] = reward 
+            println("Updating $N reward ", linucb_agents[N]["reward"])
+            la = linucb_agents[N]
             alpha_vector,V,y = LinUCB(la["V"],la["alpha_vector"],la["reward"],la["y"],la["beta"],la["nv"],la["lower_bounds"],la["upper_bounds"])
-            linucb_agents[n]["alpha_vector"] = alpha_vector 
-            linucb_agents[n]["V"] = V 
-            linucb_agents[n]["y"] = y 
+            linucb_agents[N]["alpha_vector"] = alpha_vector 
+            linucb_agents[N]["V"] = V 
+            linucb_agents[N]["y"] = y 
             alpha_config = vector_to_config(alpha_vector,deepcopy(data_area))
-            linucb_agents[n]["alpha_config"] = alpha_config 
-            push!(linucb_agents[n]["trace_params"]["V"], V)
-            push!(linucb_agents[n]["trace_params"]["y"], y)
-            push!(linucb_agents[n]["trace_params"]["a"], alpha_vector)
+            linucb_agents[N]["alpha_config"] = alpha_config 
+            push!(linucb_agents[N]["trace_params"]["V"], V)
+            push!(linucb_agents[N]["trace_params"]["y"], y)
+            push!(linucb_agents[N]["trace_params"]["a"], alpha_vector)
         end
     end
         

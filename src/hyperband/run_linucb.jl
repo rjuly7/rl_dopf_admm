@@ -1,10 +1,14 @@
-casename = "case141_added_gens_4" 
+casename = "case118_3"
+n_areas = 3
+need_csv = 0
+budget = 0.1
+tidx = 4 
 pq_lower = 150
 pq_upper = 800
 vt_lower = 3000
 vt_upper = 5000
-T = 20
-run_num = 100
+T = 10
+run_num = 1
 
 if lastindex(ARGS) >= 7
     casename = ARGS[1]

@@ -1,10 +1,8 @@
 casename = "case141_added_gens_4" 
-pq_lower = 150
-pq_upper = 800
-vt_lower = 3000
-vt_upper = 5000
-T = 20
-run_num = 1
+run_num = 101
+
+# casename = "case118_3"
+# run_num = 16
 
 if lastindex(ARGS) >= 7
     casename = ARGS[1]
@@ -48,6 +46,12 @@ data_area = initialize_dopf(data, model_type, dopf_method, max_iteration, tol, d
 linucb_agents = BSON.load("data/hyperband/linucb_$run_num.jl")["linucb_agents"]
 
 configs = get_alpha_configs(linucb_agents)
-rewards = run_with_configs(data_area,configs,optimizer)
+rewards, iteration = run_with_configs(deepcopy(data_area),configs,optimizer)
+println(iteration)
 
-plot(linucb_agents[1]["trace_params"]["reward"])
+alpha_pq = 400
+alpha_vt = 4000 
+initial_config = set_hyperparameter_configuration(data_area,alpha_pq,alpha_vt)
+configs_f = Dict(i => initial_config for i in keys(configs))
+rewards_f, iteration_f = run_with_configs(deepcopy(data_area),configs_f,optimizer)
+

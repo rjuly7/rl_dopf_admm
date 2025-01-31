@@ -5,6 +5,8 @@ function get_alpha_configs(linucb_agents)
         inv_V = inv(V)
         y = linucb_agents[n]["y"]
         hat_theta = inv_V*y 
+        lower_bounds = linucb_agents[n]["lower_bounds"]
+        upper_bounds = linucb_agents[n]["upper_bounds"]
 
         nv = length(linucb_agents[n]["upper_bounds"])
         T = 500 
@@ -89,11 +91,7 @@ function run_with_configs(data_area::Dict{Int64, <:Any},configs,optimizer)
             if flag_bounds[n] == false 
                 if pri_resid <= region_bounds[n][1] && du_resid <= region_bounds[n][2]
                     flag_bounds[n] = true 
-                    if n == 1
-                        rewards[n] = - iteration 
-                    else
-                        rewards[n] = - (iteration + rewards[n-1])
-                    end 
+                    rewards[n] = - iteration 
                     println("Flag bounds $n reward ", rewards[n])
                 end
             end
@@ -107,7 +105,7 @@ function run_with_configs(data_area::Dict{Int64, <:Any},configs,optimizer)
         iteration += 1
     end
 
-    return rewards 
+    return rewards, iteration  
 end
 
 function perturb_loads(data_orig)
