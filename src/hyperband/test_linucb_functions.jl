@@ -13,23 +13,22 @@ function get_alpha_configs(linucb_agents)
         beta = 1 + sqrt(2*log(T)+nv*log((nv+T)/nv))
         model = Model(Ipopt.Optimizer)
         set_optimizer_attribute(model, "print_level", 0)
-        @variable(model, lower_bounds[i] <= a[i=1:nv] <= upper_bounds[i])
+        @variable(model, lower_bounds[i]/1000 <= a[i=1:nv] <= upper_bounds[i]/1000)
         #@variable(model, u)
         #@objective(model, Max, dot(hat_theta,a) + sqrt(beta)*u)
         #@constraint(model, transpose(a)*inv_V*a == u^2)
         @objective(model, Max, dot(hat_theta,a))
         optimize!(model)
         println(termination_status(model))
-
         
-        alpha_vector = value.(a)
+        alpha_vector = 1000*value.(a)
         alpha_config = vector_to_config(alpha_vector,deepcopy(data_area))
         configs[n] = alpha_config
     end
     return configs 
 end
 
-function run_with_configs(data_area::Dict{Int64, <:Any},configs,optimizer)
+function run_with_configs(data_area::Dict{Int64, <:Any},configs,optimizer,linucb_agents,N)
     dopf_method = adaptive_admm_methods
     model_type = ACPPowerModel
     flag_convergence = false
@@ -39,29 +38,19 @@ function run_with_configs(data_area::Dict{Int64, <:Any},configs,optimizer)
     iteration = 1 
     max_iteration = first(data_area)[2]["option"]["max_iteration"]
 
-    region_bounds = first(linucb_agents)[2]["region_bounds"]
-    flag_bounds = Dict(n => false for n in keys(linucb_agents))
-    rewards = Dict(n => -1000 for n in keys(linucb_agents))
-    flag_keys = sort!(collect(keys(flag_bounds)))
+    region_bounds = linucb_agents[N]["region_bounds"]
+    reward = -1000
+    reached_bound = [false for ii=1:N] 
+    reached_bound_iter = [0 for ii=1:N]
+    bound_region = 1
 
     #data_area = perturb_loads(data_area)
 
-    while iteration < max_iteration && !flag_bounds[flag_keys[end]]
+    while iteration < max_iteration && !(reached_bound[end])
         # overwrite any changes the adaptive algorithm made to alphas in last iteration 
-        if iteration == 1 
-            alpha_config = configs[1]
-            for area in areas_id 
-                data_area[area]["alpha"] = deepcopy(alpha_config[area])
-            end
-        else
-            false_flags = [i for i in keys(flag_bounds) if flag_bounds[i] == false]
-            sort!(false_flags)
-            n_agent = false_flags[1]
-            println(n_agent)
-            alpha_config = configs[n_agent]
-            for area in areas_id  
-                data_area[area]["alpha"] = deepcopy(alpha_config[area])
-            end
+        for area in areas_id 
+            #fill in with alphas from linucb_agent in charge of current residual region 
+            data_area[area]["alpha"] = deepcopy(linucb_agents[bound_region]["alpha_config"][area])
         end
 
         for area in areas_id 
@@ -87,25 +76,26 @@ function run_with_configs(data_area::Dict{Int64, <:Any},configs,optimizer)
         #flag_convergence = update_global_flag_convergence(data_area)
         pri_resid = sqrt(sum(data_area[area]["mismatch"][string(area)]^2 for area in areas_id))
         du_resid = sqrt(sum(data_area[area]["dual_residual"][string(area)]^2 for area in areas_id))
-        for n in keys(flag_bounds)
-            if flag_bounds[n] == false 
-                if pri_resid <= region_bounds[n][1] && du_resid <= region_bounds[n][2]
-                    flag_bounds[n] = true 
-                    rewards[n] = - iteration 
-                    println("Flag bounds $n reward ", rewards[n])
+        for ii=1:N
+            if reached_bound[ii] == false 
+                this_bound = region_bounds[ii]
+                if pri_resid <= this_bound[1] && du_resid <= this_bound[2]
+                    reached_bound_iter[ii] = iteration 
+                    reached_bound[ii] = true 
+                    bound_region = ii+1
                 end
             end
         end
 
-        if mod(iteration, 10) == 1
+        if mod(iteration, 2) == 1
             #print_iteration(data_area, print_level, [info])
-            println("Iteration: ", iteration, "   pri: ", pri_resid, "  du: ", du_resid)
+            println("Agent : $N  bound_region $bound_region Iteration: ", iteration, "   pri: ", pri_resid, "  du: ", du_resid)
         end
 
         iteration += 1
     end
 
-    return rewards, iteration  
+    return reached_bound_iter,iteration   
 end
 
 function perturb_loads(data_orig)

@@ -128,7 +128,7 @@ function run_then_return_val_loss_agent_sp(data_area::Dict{Int64, <:Any},linucb_
     areas_id = get_areas_id(data_area)
     iteration = 1 
     max_iteration = first(data_area)[2]["option"]["max_iteration"]
-
+    println("Max iteration $max_iteration")
     region_bounds = linucb_agents[N]["region_bounds"]
     reward = -1000
     reached_bound = [false for ii=1:N] 
@@ -169,13 +169,13 @@ function run_then_return_val_loss_agent_sp(data_area::Dict{Int64, <:Any},linucb_
         #     reached_bound = true  
         # end
         for ii=1:N
-            this_bound = region_bounds[ii]
-            if pri_resid <= this_bound[1] && du_resid <= this_bound[2]
-                if reached_bound[ii] == false 
+            if reached_bound[ii] == false 
+                this_bound = region_bounds[ii]
+                if pri_resid <= this_bound[1] && du_resid <= this_bound[2]
                     reached_bound_iter[ii] = iteration 
-                end 
-                reached_bound[ii] = true 
-                bound_region = ii+1
+                    reached_bound[ii] = true 
+                    bound_region = ii+1
+                end
             end
         end
 
@@ -328,12 +328,9 @@ function LinUCB(V,action,reward,y,beta,nv,lower_bounds,upper_bounds)
     return 1000*value.(a),V,y 
 end
 
-function get_perturbed_data_area(data)
+function get_perturbed_data_area(data,max_iteration,tol,du_tol)
     model_type = ACPPowerModel
     dopf_method = adaptive_admm_methods 
-    tol = 1e-4 
-    du_tol = 0.1 
-    max_iteration = 1200
     data_orig = deepcopy(data)
     for (i,load) in data_orig["load"]
         r = rand() - 0.4
@@ -370,7 +367,7 @@ function initialize_lin_ucb(pq_bounds,vt_bounds,region_bounds,data_area, lambda)
 end
 
 function run_linucb(T,data_area,data,pq_bounds,vt_bounds,optimizer,lambda,initial_config;
-                        region_bounds=[(0.01,20),(0.001,1),(1e-4,0.1)],first_region_pq=[300,500],first_region_vt=[3500,4500])
+                max_iteration=600,tol=1e-4,du_tol=0.1,region_bounds=[(0.05,100),(0.005,2),(1e-4,0.1)],first_region_pq=[400,500],first_region_vt=[4000,4500])
     linucb_agents = Dict{Int,Any}()
     for n in eachindex(region_bounds)
         if n == 1
@@ -381,7 +378,7 @@ function run_linucb(T,data_area,data,pq_bounds,vt_bounds,optimizer,lambda,initia
     end
 
     for i=1:T 
-        data_area = get_perturbed_data_area(deepcopy(data))
+        data_area = get_perturbed_data_area(deepcopy(data),max_iteration,tol,du_tol)
         all_rewards = @distributed (append!) for N=1:length(region_bounds)
         #all_rewards = []
         #for N = 1:length(region_bounds)
